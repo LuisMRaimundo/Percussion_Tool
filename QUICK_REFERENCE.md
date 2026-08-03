@@ -10,7 +10,7 @@ One-page guide to the GUI options, outputs, and everyday use.
 |---|---|
 | Open the app | Double-click `run_nontunperc.bat` |
 | Headless full run | `run_nontunperc.bat --cli` or `python nontunperc.py --cli` |
-| Validate WAV strokes | `run_validate.bat` → GUI to **browse the sample folder**; or `run_validate.bat --cli "D:\samples"` |
+| Validate samples | `run_validate.bat` → GUI (**subfolders** searched by default; `.wav`/`.aif`/`.flac`); or `run_validate.bat --cli "D:\samples"` |
 
 **Citable result:** Monte Carlo **median** (`p50`) with percentile bands — not the deterministic single-run numbers alone.
 

@@ -13,6 +13,7 @@ from model import PlateInstrument, erb_band_edges
 from validate_against_recordings import (
     analyse_file,
     aggregate_weights,
+    find_sample_files,
     run_validation,
 )
 
@@ -129,3 +130,25 @@ def test_no_writeback_to_source_constants(synthetic_bundle, tmp_path: Path) -> N
     run_validation(wav_dir, out_dir=tmp_path / "rep", mc_draws=30)
     after = src.read_bytes()
     assert before == after
+
+
+def test_find_sample_files_recursive_and_formats(tmp_path: Path) -> None:
+    """Discovers nested .wav/.aif; skips __MACOSX and ._ junk; respects flag."""
+    root = tmp_path / "lib"
+    nested = root / "Gong" / "stroke_a"
+    nested.mkdir(parents=True)
+    junk = root / "__MACOSX" / "Gong"
+    junk.mkdir(parents=True)
+
+    (root / "top.wav").write_bytes(b"RIFF")
+    (nested / "nested.aif").write_bytes(b"FORM")
+    (nested / "also.flac").write_bytes(b"fLaC")
+    (junk / "._nested.aif").write_bytes(b"junk")
+    (nested / "._ignore.wav").write_bytes(b"junk")
+
+    all_found = find_sample_files(root, recursive=True)
+    names = {p.name for p in all_found}
+    assert names == {"top.wav", "nested.aif", "also.flac"}
+
+    top_only = find_sample_files(root, recursive=False)
+    assert {p.name for p in top_only} == {"top.wav"}

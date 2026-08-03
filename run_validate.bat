@@ -7,11 +7,12 @@ echo === NonTunPerc — Validate against recordings ===
 echo Working directory: %CD%
 echo.
 
-REM Default: open GUI (browse for the WAV sample folder).
+REM Default: open GUI (browse sample folder; searches subfolders by default).
+REM Accepts .wav / .aif / .aiff / .flac.
 REM CLI:
-REM   run_validate.bat --cli "C:\path\to\wav\folder"
-REM   run_validate.bat --cli "C:\path\to\wav\folder" cymbal_46cm_medium
-REM   run_validate.bat --cli "C:\path\to\wav\folder" cymbal_46cm_medium "C:\path\to\report_dir"
+REM   run_validate.bat --cli "C:\path\to\sample\folder"
+REM   run_validate.bat --cli "C:\path\to\sample\folder" cymbal_46cm_medium
+REM   run_validate.bat --cli "C:\path\to\sample\folder" cymbal_46cm_medium "C:\path\to\report_dir"
 
 if "%~1"=="" (
   echo Mode: GUI
@@ -36,7 +37,7 @@ if /I "%~1"=="--cli" (
 )
 
 if "%WAV_DIR%"=="" (
-  echo [FAIL] WAV folder required for CLI mode.
+  echo [FAIL] Sample folder required for CLI mode.
   echo   run_validate.bat --cli "D:\samples\cymbal"
   pause
   exit /b 1
@@ -45,13 +46,14 @@ if "%INSTRUMENT%"=="" set "INSTRUMENT=cymbal_46cm_medium"
 if "%OUT_DIR%"=="" set "OUT_DIR=%~dp0validation_out"
 
 if not exist "%WAV_DIR%" (
-  echo [FAIL] WAV folder not found: "%WAV_DIR%"
+  echo [FAIL] Sample folder not found: "%WAV_DIR%"
   pause
   exit /b 1
 )
 
 echo Mode: CLI
-echo WAV dir   : %WAV_DIR%
+echo Sample dir: %WAV_DIR%
+echo Recursive : yes (default; use python --no-recursive to disable)
 echo Instrument: %INSTRUMENT%
 echo Report dir: %OUT_DIR%
 echo.

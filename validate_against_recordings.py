@@ -65,8 +65,38 @@ _CATALOGUE = {
 # Audio I/O
 # ----------------------------------------------------------------------
 
+_AUDIO_SUFFIXES = {".wav", ".aif", ".aiff", ".flac"}
+
+
+def find_sample_files(
+    folder: Path,
+    recursive: bool = True,
+) -> List[Path]:
+    """List audio samples under ``folder``.
+
+    When ``recursive`` is True (default), walks all subfolders. Skips
+    ``__MACOSX`` directories and AppleDouble ``._*`` junk files. Case of
+    the suffix is ignored; duplicates are de-duped by resolved path.
+    """
+    folder = Path(folder)
+    if not folder.is_dir():
+        return []
+    found: set[Path] = set()
+    iterator = folder.rglob("*") if recursive else folder.iterdir()
+    for p in iterator:
+        if not p.is_file():
+            continue
+        if p.name.startswith("._"):
+            continue
+        if "__MACOSX" in p.parts:
+            continue
+        if p.suffix.lower() in _AUDIO_SUFFIXES:
+            found.add(p.resolve())
+    return sorted(found)
+
+
 def load_mono(path: Path, target_sr: int = TARGET_SR) -> Tuple[np.ndarray, int]:
-    """Load WAV, mono-mix if stereo, resample to target_sr if needed."""
+    """Load WAV/AIFF/FLAC, mono-mix if stereo, resample to target_sr if needed."""
     y, sr = sf.read(str(path), always_2d=True)
     y = np.mean(y, axis=1).astype(np.float64)
     if sr != target_sr:
@@ -519,6 +549,7 @@ def run_validation(
     out_dir: Optional[Path] = None,
     mc_draws: int = 400,
     mc_seed: int = DEFAULT_SEED,
+    recursive: bool = True,
 ) -> dict:
     """Run the full validation pipeline; write report + figure."""
     wav_dir = Path(wav_dir)
@@ -533,13 +564,12 @@ def run_validation(
     instr = _CATALOGUE[instrument_name]
     edges = erb_band_edges(20.0, 16000.0)
 
-    # Case-insensitive de-dupe (Windows: *.wav and *.WAV both match).
-    wavs = sorted({p.resolve() for p in wav_dir.glob("*.wav")})
-    wavs += sorted(
-        {p.resolve() for p in wav_dir.glob("*.WAV")} - set(wavs)
-    )
+    wavs = find_sample_files(wav_dir, recursive=recursive)
     if not wavs:
-        raise FileNotFoundError(f"no WAV files in {wav_dir}")
+        scope = "recursively under" if recursive else "in"
+        raise FileNotFoundError(
+            f"no audio samples (.wav/.aif/.aiff/.flac) {scope} {wav_dir}"
+        )
 
     file_results = [analyse_file(p, edges) for p in wavs]
     meas_med, meas_spread = aggregate_weights(file_results, "shimmer")
@@ -557,6 +587,8 @@ def run_validation(
     summary = {
         "instrument": instrument_name,
         "n_files": len(file_results),
+        "recursive": recursive,
+        "sample_dir": str(wav_dir.resolve()),
         "metrics": {
             k: (v.tolist() if isinstance(v, np.ndarray) else v)
             for k, v in metrics.items()
@@ -623,8 +655,9 @@ def launch_validate_gui() -> None:
     )
     ttk.Label(
         hdr,
-        text="Choose the folder that holds single-stroke cymbal samples "
-        "(.wav). Report is written only — no write-back to source constants.",
+        text="Choose the folder that holds single-stroke samples "
+        "(.wav / .aif / .flac). Subfolders are searched by default. "
+        "Report only — no write-back to source constants.",
         style="Sub.TLabel",
     ).pack(anchor="w")
 
@@ -636,12 +669,13 @@ def launch_validate_gui() -> None:
     out_var = tk.StringVar(value=str(ROOT / "validation_out"))
     instr_var = tk.StringVar(value="cymbal_46cm_medium")
     draws_var = tk.StringVar(value="400")
+    recursive_var = tk.BooleanVar(value=True)
     status_var = tk.StringVar(value="Select a sample folder, then Run.")
 
     def browse_wav() -> None:
         initial = wav_var.get() if Path(wav_var.get()).is_dir() else str(ROOT)
         d = filedialog.askdirectory(
-            title="Select folder with WAV samples",
+            title="Select folder with audio samples (searches subfolders)",
             initialdir=initial,
         )
         if d:
@@ -657,18 +691,15 @@ def launch_validate_gui() -> None:
         if d:
             out_var.set(d)
 
-    def count_wavs(folder: Path) -> int:
-        if not folder.is_dir():
-            return 0
-        return len({p.resolve() for p in folder.glob("*.wav")} |
-                   {p.resolve() for p in folder.glob("*.WAV")})
-
     def refresh_count(*_args) -> None:
-        n = count_wavs(Path(wav_var.get()))
-        status_var.set(f"{n} WAV file(s) found in sample folder.")
+        folder = Path(wav_var.get())
+        files = find_sample_files(folder, recursive=recursive_var.get())
+        n = len(files)
+        scope = "including subfolders" if recursive_var.get() else "top level only"
+        status_var.set(f"{n} sample file(s) found ({scope}).")
 
     row = 0
-    ttk.Label(card, text="Sample folder (WAVs)", style="Card.TLabel").grid(
+    ttk.Label(card, text="Sample folder", style="Card.TLabel").grid(
         row=row, column=0, sticky="w", pady=4
     )
     row += 1
@@ -681,6 +712,17 @@ def launch_validate_gui() -> None:
     ttk.Button(wav_row, text="Browse…", command=browse_wav).pack(
         side="left", padx=(6, 0)
     )
+    row += 1
+
+    style.configure(
+        "TCheckbutton", background=panel, foreground=text, font=("Segoe UI", 9)
+    )
+    ttk.Checkbutton(
+        card,
+        text="Search inside subfolders",
+        variable=recursive_var,
+        command=refresh_count,
+    ).grid(row=row, column=0, sticky="w", pady=(6, 2))
     row += 1
 
     ttk.Label(card, text="Instrument model", style="Card.TLabel").grid(
@@ -755,17 +797,21 @@ def launch_validate_gui() -> None:
                 "Validate", f"Sample folder not found:\n{wav_dir}"
             )
             return
-        n = count_wavs(wav_dir)
+        recursive = bool(recursive_var.get())
+        n = len(find_sample_files(wav_dir, recursive=recursive))
         if n == 0:
             messagebox.showwarning(
-                "Validate", f"No .wav files found in:\n{wav_dir}"
+                "Validate",
+                f"No audio samples (.wav/.aif/.flac) found "
+                f"{'under' if recursive else 'in'}:\n{wav_dir}",
             )
             return
         running["flag"] = True
         run_btn.state(["disabled"])
         status_var.set("Running validation…")
-        append_log(f"=== Validation start ===")
-        append_log(f"WAV dir   : {wav_dir}")
+        append_log("=== Validation start ===")
+        append_log(f"Sample dir: {wav_dir}")
+        append_log(f"Recursive : {recursive}")
         append_log(f"Instrument: {instr_var.get()}")
         append_log(f"Out dir   : {out_var.get()}")
         append_log(f"Files     : {n}")
@@ -777,6 +823,7 @@ def launch_validate_gui() -> None:
                     instrument_name=instr_var.get(),
                     out_dir=Path(out_var.get()),
                     mc_draws=int(draws_var.get()),
+                    recursive=recursive,
                 )
                 rho = summary["metrics"]["spearman_rho"]
                 inside = summary["metrics"]["frac_inside_90"]
@@ -822,7 +869,10 @@ def launch_validate_gui() -> None:
 
     wav_var.trace_add("write", refresh_count)
     refresh_count()
-    append_log("Ready. Browse to the folder containing your sample WAVs.")
+    append_log(
+        "Ready. Browse to a folder of samples "
+        "(.wav / .aif / .flac; subfolders included by default)."
+    )
     root.mainloop()
 
 
@@ -832,7 +882,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     ap.add_argument(
         "--wav-dir", type=Path, default=None,
-        help="folder of WAV samples (omit to open the GUI)",
+        help="folder of audio samples (omit to open the GUI)",
     )
     ap.add_argument(
         "--instrument", default="cymbal_46cm_medium",
@@ -841,6 +891,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--mc-draws", type=int, default=400)
     ap.add_argument("--mc-seed", type=int, default=DEFAULT_SEED)
+    ap.add_argument(
+        "--no-recursive", action="store_true",
+        help="do not search subfolders (top level only)",
+    )
     ap.add_argument("--gui", action="store_true", help="force GUI")
     ap.add_argument("--cli", action="store_true", help="require CLI (needs --wav-dir)")
     args = ap.parse_args(argv)
@@ -858,6 +912,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         out_dir=args.out,
         mc_draws=args.mc_draws,
         mc_seed=args.mc_seed,
+        recursive=not args.no_recursive,
     )
     print(
         f"[VAL] files={summary['n_files']}  "
