@@ -1,4 +1,4 @@
-# NonTunPerc — non-tuned percussion density model (v0.3)
+# NonTunPerc — non-tuned percussion density model (v0.3.1)
 
 A bibliography-based, parametric model that generates **ERB-band spectral
 density profiles** for unpitched percussion from physical input parameters
@@ -12,11 +12,14 @@ out, no shared code, no modification to the existing pipeline.
 |---|---|
 | `run_nontunperc.bat` | Opens the **NonTunPerc GUI** |
 | `run_nontunperc.bat --cli` | Headless full pipeline (profiles + MC + calibration) |
-| `run_validate.bat [wav-dir]` | Validate against cymbal WAV recordings |
+| `run_validate.bat` | Validate against recordings (GUI; metadata auto-group) |
+| `run_validate.bat --cli "D:\Samples"` | Headless auto-group validation |
 
 ```text
+pip install -e ".[dev]"        # or: pip install -r requirements.txt
 python nontunperc.py           # GUI
 python nontunperc.py --cli     # headless (replaces demo.py)
+python -m pytest tests/ -q
 ```
 
 `demo.py` remains as a thin compatibility wrapper around the headless pipeline.
@@ -24,6 +27,8 @@ python nontunperc.py --cli     # headless (replaces demo.py)
 **Documentation**
 - [`QUICK_REFERENCE.md`](QUICK_REFERENCE.md) — GUI options, outputs, everyday use  
 - [`TECHNICAL_MANUAL.md`](TECHNICAL_MANUAL.md) — equations, architecture, methods, validity  
+- [`data/README.md`](data/README.md) — source-constant extraction and AmplitudeLayer mapping  
+- [`CHANGES.md`](CHANGES.md) — versioned change log
 
 ## 1. Input → output
 
@@ -36,8 +41,10 @@ material preset, optional Chladni anchor `(c, b, p)`.
 - `energy_w_<phase>` — relative band-energy weights per temporal phase
   (plates: strike / buildup / shimmer / residue; membranes: strike / decay);
 - optional `spl_db_<phase>` — absolute band levels (dB SPL) when the
-  AmplitudeLayer has Sivian/Meyer coverage, at the source reference
+  AmplitudeLayer accepts coverage (see §3), at the source reference
   distance (typically **3 ft / 0.9144 m**);
+- `energy_provenance` and `fill_fraction` — how initial weights were
+  obtained (equipartition vs measured/mixed; residual-fill fraction);
 - a composite scalar index per phase (explicitly labelled as a summary;
   the per-band vector is the primary datum);
 - CSV export (`density_profiles.csv`) with one row per (instrument, band).
@@ -70,8 +77,9 @@ Phase energy: equipartition over modes at excitation
 (`internal_default`), evolved by exponential decay per band, with a
 3–5 kHz emphasis in buildup/shimmer representing the nonlinear low→high
 energy transfer (Rossing, 2000, Fig. 9.6, observations 2–4). Where the
-AmplitudeLayer has coverage, equipartition is replaced by measured band
-weights (see §3).
+AmplitudeLayer **accepts** coverage (fill_fraction ≤ 0.60), equipartition
+is replaced by measured / mixed band weights (see §3); mostly-filled
+vectors are refused.
 
 ### 2.2 Membranes (bass drum)
 
@@ -85,25 +93,47 @@ linearly). Tension may be inferred from a nominal (1,1)-mode frequency.
 (Rossing Table 9.1 / Fig. 9.3; Sivian–Dunn–White 1931 band edges and
 peak/average anchors; Meyer 2009 corroboration).
 
+**Residual fill (equal density):** after placing digitized
+`peak_power_band` rows, residual whole-spectrum power is distributed over
+uncovered historical bands **proportionally to bandwidth** (uniform W/Hz;
+`internal_default`). `fill_fraction = residual / whole`.
+
+**Provenance / refusal** (`internal_default` thresholds):
+
+| fill_fraction | Label / action |
+|---|---|
+| ≤ 0.10 | `primary_source` |
+| ≤ 0.60 | `mixed_primary_and_fill` |
+| > 0.60 | **refuse** → equipartition (`internal_default`); note states fill_fraction |
+
+`has_coverage` uses the same rule so GUI/CLI listings match runtime.
+Cymbal catalogue names currently refuse (~90% fill from a single HF
+textual band). Suspended-cymbal names alias Sivian's 15-in. **clash PAIR**
+(`internal_default` approximation; §8.8).
+
 **ERB mapping (energy-preserving overlap integration):** each historical
 band energy `Eᵢ` is treated as uniform density `ρᵢ = Eᵢ/Δfᵢ` on its
 printed `[f_lo, f_hi]`; each ERB band receives `∫ ρ(f) df` over the
 overlap. Band edges are never resampled before this step. Above ~5 kHz,
-Meyer corrections recorded in `discrepancy_db` are applied.
+Meyer corrections recorded in `discrepancy_db` (`literature_derived`
+offsets) are applied.
 
 Relative outputs remain **bit-identical** to the equipartition path for
-instruments without coverage (e.g. gong, tam-tam).
+instruments without accepted coverage (e.g. gong, tam-tam, refused cymbals).
 
 ## 4. Calibration bridge
 
 `calibration.py` runs quasi-harmonic bridge fixtures for trumpet,
 clarinet, flute, and bass viol (string-family stand-in; violin full-band
-spectrum is absent from Sivian 1931). It compares model composite
-indices to empirical band-power indices and writes
-`calibration_report.md` with the conversion factor and its spread.
+spectrum is absent from Sivian 1931). Empirical indices use **measured
+bands only** (ERB bands with >50% energy from digitized rows; fill
+excluded). Instruments with fewer than 2 measured bands, or refused
+AmplitudeLayer coverage, are listed under exclusions in
+`calibration_report.md`.
 
 **The spread IS the uncertainty to be attached to any cross-domain ratio
-claim.**
+claim.** The factor is provisional until `needs_manual_reading` histogram
+cells in `data/README.md` are completed.
 
 ## 5. Monte Carlo uncertainty (`uncertainty.py`)
 
@@ -111,7 +141,7 @@ claim.**
 
 | parameter | distribution | width | provenance |
 |---|---|---|---|
-| thickness | lognormal | 95% span ±25% (plates) / ±10% (membranes) | `internal_default` — manufacturing taper and hammering on cymbals/gongs; tighter membrane film tolerance |
+| thickness | lognormal | 95% multiplicative interval `[1/(1+f), 1+f]` with f=0.25 plates / 0.10 membranes | `internal_default` — manufacturing taper and hammering on cymbals/gongs; tighter membrane film tolerance |
 | diameter | normal | σ = 1% of nominal | `internal_default` — nominal sizes are tight |
 | E, ρ | normal | σ = 5% | `internal_default` — alloy / film variation |
 | Chladni *p* | uniform on Table 9.1 p1–p2 span of the same class | class span | span itself: `primary_source`; 46 cm uses 18-in medium as nearest class (`internal_default`) |
@@ -129,22 +159,26 @@ the companion empirical pipeline's bootstrap-CI convention).
 
 ## 6. Empirical validation against recordings
 
-`validate_against_recordings.py` is a standalone one-time check:
+`validate_against_recordings.py` is a standalone check (GUI by default).
+With `--auto-group` (CLI default), samples are grouped by filename/
+folder metadata only — never by fitting physical parameters from audio.
 
 ```text
-python validate_against_recordings.py --wav-dir <folder> \
+python validate_against_recordings.py --gui
+python validate_against_recordings.py --cli --auto-group --wav-dir <folder>
+python validate_against_recordings.py --cli --no-auto-group --wav-dir <folder> \
     --instrument cymbal_46cm_medium [--out report_dir]
 ```
 
-It mono-mixes / resamples WAVs to 44.1 kHz, detects onsets (10× noise
+It mono-mixes / resamples audio to 44.1 kHz, detects onsets (10× noise
 floor), segments with the model's plate phase windows, computes Welch
 band energies on the ERB grid, counts shimmer-phase spectral peaks at
-prominence 9/12/15 dB, and compares the measured shimmer profile to the
-Task-6 MC fan (Spearman ρ, 90% coverage, log-ratio bias). Results go to
+prominence 9/12/15 dB, and compares measured shimmer profiles to the MC
+fan (Spearman ρ, 90% coverage, log-ratio bias). Results go to
 `validation_report.md` only — **never** into `data/source_constants.csv`.
 
-Welch windows: ~20 ms, 50% overlap when the phase segment is long
-enough; shorter strike segments use `n//4` (documented in the script).
+Welch windows: ~100 ms (long shimmer/residue), ~40 ms (buildup), short
+strike `n//2`; 50% overlap (documented in the script).
 
 ## 7. Built-in analytic validation (`demo.py` / tests)
 
@@ -167,19 +201,25 @@ enough; shorter strike segments use `n//4` (documented in the script).
    modelled; the lowest bass-drum modes are overestimated in frequency.
 4. **Equipartition at excitation** is a stated convention, not a
    measurement; stroke type and striking point are not yet parameters.
-   (AmplitudeLayer replaces this only where Sivian/Meyer coverage exists.)
+   AmplitudeLayer replaces this only when digitized coverage exists **and**
+   residual fill_fraction ≤ 0.60; mostly-filled vectors are refused and
+   equipartition (`internal_default`) is kept.
 5. **Scale commensurability.** Indices are on the model's own scale.
    Ratio comparisons against empirically derived (Iowa/OrchideaSOL)
    pitched-instrument metadata require the calibration bridge:
    run the same derivation for 1–2 pitched instruments with known
    empirical values and use the discrepancy as the conversion factor and
-   its magnitude as the reported uncertainty.
+   its magnitude as the reported uncertainty. The factor is provisional
+   until `needs_manual_reading` histogram cells are completed.
 6. **1931 high-frequency chain.** The 1931 measurement chain has limited
    high-frequency accuracy; values above ~5 kHz are corroborated or
    corrected by Meyer, and the correction is recorded (`discrepancy_db`).
 7. **Specimen anchoring.** Absolute levels describe single
    specimens/players and anchor the scale, not specimen variance.
    Specimen variance is instead carried by the Monte Carlo layer (§5).
+8. **Clash-pair alias.** Suspended-cymbal model names map onto Sivian's
+   15-in. clash PAIR (`cymbals_15in`) — a different mechanical system and
+   stroke (`internal_default` approximation; see `data/README.md`).
 
 ## 9. References
 

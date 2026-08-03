@@ -100,7 +100,7 @@ sivian_meta,bass_drum_C_30x12,,Sivian_Dunn_White_1931,Fig_59,primary_source,peak
 sivian_meta,bass_drum_D_34x19,,Sivian_Dunn_White_1931,text_p353_and_Fig59,primary_source,peak_power_whole,4.9,W,W,4.9,,,1931.0,0.9144,,0,text estimates ~5 W
 sivian_meta,bass_drum_D_34x19,,Sivian_Dunn_White_1931,Fig_36,primary_source,avg_total_pressure,66.0,bars,Pa,6.6,,,1931.0,0.9144,,0,
 sivian_meta,bass_drum_D_34x19,,Sivian_Dunn_White_1931,text_p353,primary_source,peak_power_band,1.2,W,W,1.2,20.0,62.5,1931.0,0.9144,,0,highest peaks in lowest band; Fig.59 band power
-sivian_meta,cymbals_15in,,Sivian_Dunn_White_1931,text_p353_and_Fig59,primary_source,peak_power_whole,9.5,W,W,9.5,,,1931.0,0.9144,,0,distance 3 ft
+sivian_meta,cymbals_15in,,Sivian_Dunn_White_1931,text_p353_and_Fig59,primary_source,peak_power_whole,9.5,W,W,9.5,,,1931.0,0.9144,,0,distance 3 ft | model mapping: suspended-cymbal catalogue names map onto this 15-in clash PAIR (different mechanical system/stroke); approximation internal_default
 sivian_meta,cymbals_15in,,Sivian_Dunn_White_1931,Fig_38,primary_source,avg_total_pressure,15.0,bars,Pa,1.5,,,1931.0,0.9144,,0,
 sivian_meta,cymbals_15in,,Sivian_Dunn_White_1931,Fig_59,primary_source,peak_power_band,0.95,W,W,0.95,8000.0,11300.0,1931.0,0.9144,,0,highest peaks above 8000 c.p.s.
 sivian_meta,trumpet,,Sivian_Dunn_White_1931,text_p358_and_Fig59,primary_source,peak_power_whole,0.314,W,W,0.314,,,1931.0,0.9144,,0,314 milliwatts; 18% of intervals
@@ -143,7 +143,7 @@ meyer_level,flute,,Meyer_2009,flute_chapter,primary_source,sound_power_level_for
 meyer_level,violin,,Meyer_2009,p103,primary_source,sound_power_level_forte_median,89.0,dB_re_1pW,dB_re_1pW,89.0,,,2009.0,,,0,
 meyer_level,violin,,Meyer_2009,p103,primary_source,sound_power_level_ff_fast,94.0,dB_re_1pW,dB_re_1pW,94.0,,,2009.0,,,0,
 meyer_level,violin,,Meyer_2009,p103,primary_source,sound_power_level_pp_fast,74.0,dB_re_1pW,dB_re_1pW,74.0,,,2009.0,,,0,
-meyer_hf_discrepancy,cymbals_15in,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,primary_source,discrepancy_db,3.0,dB,dB,3.0,5600.0,11300.0,1931.0,0.9144,3.0,0,Sivian places peak power in 8-11.3 kHz; Meyer modern cymbal power totals preferred for absolute scale above ~5 kHz; 3 dB conservative offset recorded (not a figure reading)
-meyer_hf_discrepancy,trumpet,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,primary_source,discrepancy_db,6.0,dB,dB,6.0,5600.0,11300.0,1931.0,0.9144,6.0,0,Sivian 1931 HF chain limited; Meyer ff spectra retain substantial 3 kHz energy then fall; prefer Meyer above ~5 kHz
-meyer_hf_discrepancy,clarinet,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,primary_source,discrepancy_db,5.0,dB,dB,5.0,5600.0,11300.0,1931.0,0.9144,5.0,0,prefer Meyer above ~5 kHz
-meyer_hf_discrepancy,flute,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,primary_source,discrepancy_db,8.0,dB,dB,8.0,5600.0,11300.0,1931.0,0.9144,8.0,0,Meyer: 3 kHz already 20-40 dB down then 15-22 dB/oct; prefer Meyer above ~5 kHz
+meyer_hf_discrepancy,cymbals_15in,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,literature_derived,discrepancy_db,3.0,dB,dB,3.0,5600.0,11300.0,1931.0,0.9144,3.0,0,Sivian places peak power in 8-11.3 kHz; Meyer modern cymbal power totals preferred for absolute scale above ~5 kHz; 3 dB conservative offset recorded (not a figure reading)
+meyer_hf_discrepancy,trumpet,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,literature_derived,discrepancy_db,6.0,dB,dB,6.0,5600.0,11300.0,1931.0,0.9144,6.0,0,Sivian 1931 HF chain limited; Meyer ff spectra retain substantial 3 kHz energy then fall; prefer Meyer above ~5 kHz
+meyer_hf_discrepancy,clarinet,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,literature_derived,discrepancy_db,5.0,dB,dB,5.0,5600.0,11300.0,1931.0,0.9144,5.0,0,prefer Meyer above ~5 kHz
+meyer_hf_discrepancy,flute,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,literature_derived,discrepancy_db,8.0,dB,dB,8.0,5600.0,11300.0,1931.0,0.9144,8.0,0,Meyer: 3 kHz already 20-40 dB down then 15-22 dB/oct; prefer Meyer above ~5 kHz

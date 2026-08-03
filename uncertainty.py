@@ -41,8 +41,8 @@ from model import (
 ROOT = Path(__file__).resolve().parent
 Instrument = Union[PlateInstrument, MembraneInstrument]
 
-# Lognormal sigma so that the 95% multiplicative interval is ±frac
-# (i.e. [1-frac, 1+frac] about the median). internal_default mapping.
+# Lognormal sigma so the 95% multiplicative interval is
+# [1/(1+frac), (1+frac)] about the median (asymmetric). internal_default.
 def _lognormal_sigma_for_95pct_span(frac: float) -> float:
     return float(np.log(1.0 + frac) / 1.96)
 
@@ -157,6 +157,7 @@ def _perturb_plate(
     E = max(E, 1e6)
     rho = max(rho, 1.0)
     key = f"_mc_{instr.material}_{draw_id}"
+    # Not thread-safe: temporary MATERIALS mutation; relies on finally cleanup.
     MATERIALS[key] = Material(key, E=E, rho=rho, nu=base.nu)
 
     chladni = instr.chladni

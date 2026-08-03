@@ -42,3 +42,25 @@ frequency. Mapping onto the model ERB grid is **energy-preserving
 overlap integration**: density ρᵢ = Eᵢ/Δfᵢ inside each historical band;
 each ERB band receives ∫ ρ(f) df over its overlap. See README § Absolute
 amplitude layer.
+
+Residual whole-spectrum power after named bands is filled with **uniform
+spectral density** (W/Hz) over uncovered historical bands
+(`internal_default` fill, bandwidth-proportional). Provenance thresholds
+(`internal_default`): fill_fraction ≤ 0.10 → `primary_source`; ≤ 0.60 →
+`mixed_primary_and_fill`; > 0.60 → AmplitudeLayer **refuses** coverage
+(equipartition kept; not labelled as a measurement).
+
+### Instrument-name aliases (`_INSTRUMENT_SOURCE_KEYS`)
+
+Suspended-cymbal model entries (`cymbal_16in_thin`, `cymbal_18in_medium`,
+`cymbal_46cm_medium`) map onto Sivian's **15-in. clash PAIR** specimen
+(`cymbals_15in`) — a different mechanical system and stroke. This alias
+is an approximation labelled `internal_default` (see the
+`peak_power_whole` notes cell for `cymbals_15in`).
+
+### Provenance label correction (values unchanged)
+
+The four `meyer_hf_discrepancy` rows were re-labelled from
+`primary_source` to `literature_derived` because their notes already
+state the offsets are conservative estimates, not figure readings. **No
+numeric values were changed.**

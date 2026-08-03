@@ -8,7 +8,12 @@
 
 ## Provenance classes
 
-`primary_source` | `derived` | `literature_derived` | `internal_default`
+`primary_source` | `derived` | `literature_derived` |
+`mixed_primary_and_fill` | `internal_default`
+
+AmplitudeLayer: fill_fraction ≤ 0.10 → `primary_source`; ≤ 0.60 →
+`mixed_primary_and_fill`; > 0.60 → refuse (equipartition). Residual fill
+is equal-density (∝ bandwidth), not equal energy per band.
 
 ## Equations (must hold)
 
@@ -30,7 +35,7 @@
 ## Export schema (minimum columns)
 
 `instrument, family, band_index, f_lo_hz, f_hi_hz, f_centre_hz,
-modes_per_band, energy_w_<phase>`
+modes_per_band, energy_w_<phase>, energy_provenance, fill_fraction`
 
 ## Sanity assertions (tests)
 

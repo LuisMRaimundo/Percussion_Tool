@@ -393,6 +393,8 @@ def energy_preserving_remap(
 
 
 # Name aliases from prototype instruments -> digitized Sivian keys.
+# Cymbal model names map onto Sivian's 15-in. clash PAIR (different
+# mechanical system and stroke) — approximation labelled internal_default.
 _INSTRUMENT_SOURCE_KEYS = {
     "cymbal_16in_thin": "cymbals_15in",
     "cymbal_18in_medium": "cymbals_15in",
@@ -406,15 +408,25 @@ _INSTRUMENT_SOURCE_KEYS = {
     "violin": "violin_soft",
 }
 
+# Fill-fraction thresholds for AmplitudeLayer provenance (internal_default).
+# fill_fraction = residual_power / whole_spectrum_peak_power after placing
+# digitized peak_power_band rows.
+FILL_FRAC_PRIMARY_MAX = 0.10   # <=10% fill → label primary_source
+FILL_FRAC_MIXED_MAX = 0.60     # <=60% fill → mixed_primary_and_fill; above → refuse
+# ERB band counts as "measured" for calibration if >50% of its remapped
+# energy came from measured historical bands (internal_default).
+ERB_MEASURED_ENERGY_FRAC = 0.50
+
 
 @dataclass
 class AmplitudeLayer:
     """Absolute-amplitude layer over digitized Sivian/Meyer constants.
 
     Loads ``data/source_constants.csv``. Where an instrument has peak-band
-    power coverage, those energies replace equipartition as the initial
-    relative weights (after ERB remap). Otherwise equipartition is kept
-    and labelled ``internal_default``.
+    power coverage **and** residual fill_fraction ≤ ``FILL_FRAC_MIXED_MAX``,
+    those energies replace equipartition as the initial relative weights
+    (after ERB remap). Mostly-filled vectors are refused; equipartition
+    stays labelled ``internal_default``.
     """
 
     csv_path: Path
@@ -454,21 +466,63 @@ class AmplitudeLayer:
     def source_key(self, instrument_name: str) -> Optional[str]:
         return _INSTRUMENT_SOURCE_KEYS.get(instrument_name)
 
+    def fill_fraction_for(self, instrument_name: str) -> Optional[float]:
+        """Return residual fill fraction for ``instrument_name``, or None."""
+        key = self.source_key(instrument_name)
+        if key is None:
+            return None
+        _lo, _hi, e, _meas, fill_frac, _whole, _dist = self.historical_band_powers(
+            key
+        )
+        if e.size == 0:
+            return None
+        return float(fill_frac)
+
+    def n_measured_bands(self, instrument_name: str) -> int:
+        key = self.source_key(instrument_name)
+        if key is None:
+            return 0
+        _lo, _hi, _e, is_measured, _ff, _w, _d = self.historical_band_powers(key)
+        if is_measured.size == 0:
+            return 0
+        return int(np.sum(is_measured))
+
     def has_coverage(self, instrument_name: str) -> bool:
+        """True only when digitized bands exist and fill is not mostly residual.
+
+        Uses the same thresholds as ``erb_weights_and_spl`` so GUI/CLI listings
+        agree with runtime behaviour (internal_default thresholds).
+        """
         key = self.source_key(instrument_name)
         if key is None:
             return False
-        sub = self.table[
-            (self.table["instrument"] == key)
-            & (self.table["parameter"] == "peak_power_band")
-            & (self.table["needs_manual_reading"] != 1)
-        ]
-        return len(sub) > 0
+        lo, hi, e, is_measured, fill_frac, _whole, _dist = (
+            self.historical_band_powers(key)
+        )
+        if e.size == 0 or not bool(np.any(is_measured)):
+            return False
+        return float(fill_frac) <= FILL_FRAC_MIXED_MAX
 
-    def historical_band_powers(self, source_key: str
-                               ) -> Tuple[np.ndarray, np.ndarray, np.ndarray,
-                                          float, float]:
-        """Return (lo, hi, energy_W, whole_W, distance_m) for ``source_key``."""
+    def historical_band_powers(
+        self, source_key: str
+    ) -> Tuple[
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, float, float
+    ]:
+        """Return historical band powers for ``source_key``.
+
+        Returns
+        -------
+        lo, hi, energy_W, is_measured, fill_fraction, whole_W, distance_m
+
+        ``is_measured`` is True only for bands that received a digitized
+        ``peak_power_band`` row (not residual fill).
+
+        Residual power (``whole − Σ measured``) is distributed over uncovered
+        bands **proportionally to bandwidth** — uniform spectral density in
+        W/Hz across the uncovered region (`internal_default` fill,
+        uniform-density variant). ``fill_fraction = residual / whole``
+        (0 when no fill or whole ≤ 0).
+        """
         meta = self.table[self.table["instrument"] == source_key]
         whole_rows = meta[meta["parameter"] == "peak_power_whole"]
         whole = float(whole_rows["value_si"].iloc[0]) if len(whole_rows) else 0.0
@@ -480,25 +534,33 @@ class AmplitudeLayer:
             & meta["value_si"].notna()
         ]
         if len(bands) == 0:
-            return (np.array([]), np.array([]), np.array([]), whole, distance)
-        lo = bands["band_lo_hz"].to_numpy(float)
-        hi = bands["band_hi_hz"].to_numpy(float)
-        e = bands["value_si"].to_numpy(float)
-        # Residual whole-spectrum power distributed flat over uncovered
-        # historical bands (internal_default fill).
-        covered = float(e.sum())
+            empty = np.array([])
+            return empty, empty, empty, empty.astype(bool), 0.0, whole, distance
+        lo_m = bands["band_lo_hz"].to_numpy(float)
+        hi_m = bands["band_hi_hz"].to_numpy(float)
+        e_m = bands["value_si"].to_numpy(float)
+        covered = float(e_m.sum())
         residual = max(whole - covered, 0.0)
+        fill_fraction = (residual / whole) if whole > 0 else 0.0
+
         all_lo = self.band_edges_hz[:-1]
         all_hi = self.band_edges_hz[1:]
-        density = np.zeros(len(all_lo))
-        for a, b, ee in zip(lo, hi, e):
+        energy = np.zeros(len(all_lo), dtype=float)
+        is_measured = np.zeros(len(all_lo), dtype=bool)
+        for a, b, ee in zip(lo_m, hi_m, e_m):
             for i, (x, y) in enumerate(zip(all_lo, all_hi)):
                 if abs(x - a) < 1e-9 and abs(y - b) < 1e-9:
-                    density[i] += ee
-        uncovered = density <= 0
+                    energy[i] += ee
+                    is_measured[i] = True
+        uncovered = ~is_measured
         if residual > 0 and uncovered.any():
-            density[uncovered] = residual / uncovered.sum()
-        return all_lo, all_hi, density, whole, distance
+            widths = all_hi - all_lo
+            uw = widths[uncovered]
+            total_w = float(uw.sum())
+            if total_w > 0:
+                # Uniform spectral density fill: E_i ∝ Δf_i (internal_default).
+                energy[uncovered] = residual * (uw / total_w)
+        return all_lo, all_hi, energy, is_measured, fill_fraction, whole, distance
 
     def _meyer_hf_factor(self, source_key: str) -> float:
         disc = self.table[
@@ -510,18 +572,32 @@ class AmplitudeLayer:
         ddb = float(disc["discrepancy_db"].iloc[0])
         return float(10.0 ** (-ddb / 10.0))
 
+    def provenance_for_fill(self, fill_fraction: float) -> Optional[str]:
+        """Map fill fraction → provenance label, or None to refuse coverage."""
+        if fill_fraction <= FILL_FRAC_PRIMARY_MAX:
+            return "primary_source"
+        if fill_fraction <= FILL_FRAC_MIXED_MAX:
+            return "mixed_primary_and_fill"
+        return None
+
     def erb_weights_and_spl(
         self, instrument_name: str, erb_edges: np.ndarray
-    ) -> Optional[Tuple[np.ndarray, np.ndarray, float, str]]:
-        """Return (relative_w, spl_db_per_band, ref_distance_m, provenance).
+    ) -> Optional[Tuple[np.ndarray, np.ndarray, float, str, float]]:
+        """Return (relative_w, spl_db_per_band, ref_distance_m, provenance, fill_fraction).
 
-        ``None`` if no usable coverage (caller keeps equipartition).
+        ``None`` if no usable coverage (caller keeps equipartition). A vector
+        that is mostly residual fill is refused (not labelled as a measurement).
         """
         key = self.source_key(instrument_name)
-        if key is None or not self.has_coverage(instrument_name):
+        if key is None:
             return None
-        lo, hi, e, whole, dist = self.historical_band_powers(key)
+        lo, hi, e, _is_meas, fill_frac, _whole, dist = self.historical_band_powers(
+            key
+        )
         if e.size == 0 or e.sum() <= 0:
+            return None
+        provenance = self.provenance_for_fill(float(fill_frac))
+        if provenance is None:
             return None
         # Prefer Meyer above ~5 kHz: scale historical density in those bands.
         hf = self._meyer_hf_factor(key)
@@ -537,7 +613,7 @@ class AmplitudeLayer:
              for p in erb_e],
             dtype=float,
         )
-        return w, spl, dist, "primary_source"
+        return w, spl, dist, provenance, float(fill_frac)
 
 
 @dataclass
@@ -552,6 +628,7 @@ class DensityProfile:
     absolute_spl_db: Dict[str, np.ndarray] = field(default_factory=dict)
     energy_provenance: str = "internal_default"
     ref_distance_m: Optional[float] = None
+    fill_fraction: Optional[float] = None
 
     def composite_index(self, phase: str) -> float:
         """
@@ -581,6 +658,8 @@ class DensityProfile:
                 "energy_provenance": self.energy_provenance,
                 "ref_distance_m": self.ref_distance_m
                 if self.ref_distance_m is not None else "",
+                "fill_fraction": self.fill_fraction
+                if self.fill_fraction is not None else "",
             }
             for ph, w in self.energy_weights.items():
                 row[f"energy_w_{ph}"] = w[i]
@@ -616,14 +695,16 @@ def generate_profile(
     e0 = None
     provenance = "internal_default"
     ref_dist: Optional[float] = None
+    fill_fraction: Optional[float] = None
     abs_spl: Dict[str, np.ndarray] = {}
 
     if amplitude_layer is not None:
         mapped = amplitude_layer.erb_weights_and_spl(instr.name, edges)
         if mapped is not None:
-            e0, spl0, ref_dist, provenance = mapped
+            e0, spl0, ref_dist, provenance, fill_fraction = mapped
             notes.append(
                 f"initial energy from AmplitudeLayer ({provenance}); "
+                f"fill_fraction={fill_fraction:.3f}; "
                 f"ref distance {ref_dist:.4f} m"
             )
             # Phase-evolve absolute SPL with the same relative envelopes.
@@ -640,12 +721,22 @@ def generate_profile(
             return DensityProfile(
                 instr.name, family, edges, centres, counts, weights, notes,
                 absolute_spl_db=abs_spl, energy_provenance=provenance,
-                ref_distance_m=ref_dist,
+                ref_distance_m=ref_dist, fill_fraction=fill_fraction,
+            )
+        # Coverage refused (e.g. mostly residual fill): keep equipartition
+        # but record why, including the fill fraction that triggered refusal.
+        ff = amplitude_layer.fill_fraction_for(instr.name)
+        if ff is not None and ff > FILL_FRAC_MIXED_MAX:
+            fill_fraction = ff
+            notes.append(
+                f"AmplitudeLayer refused: fill_fraction={ff:.3f} > "
+                f"{FILL_FRAC_MIXED_MAX} (vector mostly residual fill, not a "
+                f"measurement); using equipartition (internal_default)"
             )
 
     weights = _band_energy_weights(instr, edges, phases, e0=e0)
     return DensityProfile(
         instr.name, family, edges, centres, counts, weights, notes,
         absolute_spl_db=abs_spl, energy_provenance=provenance,
-        ref_distance_m=ref_dist,
+        ref_distance_m=ref_dist, fill_fraction=fill_fraction,
     )

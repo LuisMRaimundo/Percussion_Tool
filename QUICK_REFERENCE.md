@@ -1,6 +1,7 @@
 # NonTunPerc — Quick reference
 
 One-page guide to the GUI options, outputs, and everyday use.
+Version **0.3.1**.
 
 ---
 
@@ -8,6 +9,7 @@ One-page guide to the GUI options, outputs, and everyday use.
 
 | Action | How |
 |---|---|
+| Install deps | `pip install -e ".[dev]"` or `pip install -r requirements.txt` |
 | Open the app | Double-click `run_nontunperc.bat` |
 | Headless full run | `run_nontunperc.bat --cli` or `python nontunperc.py --cli` |
 | Validate samples | `run_validate.bat` → GUI (**auto-group** from filenames; subfolders on); or `run_validate.bat --cli "D:\Samples"`; manual: `run_validate.bat --cli "D:\folder" cymbal_18in_medium` |
@@ -27,11 +29,11 @@ From physical parameters (size, thickness/tension, material), NonTunPerc predict
 | Option | Meaning |
 |---|---|
 | **VAL1 / VAL2 checks** | Sanity checks on the 46 cm cymbal: modal density ≈ 64 modes/kHz (VAL1); Chladni fit reproduces Rossing Fig. 9.3 (VAL2). |
-| **Density profiles (CSV)** | Writes `density_profiles.csv`: one row per instrument × ERB band with mode counts and relative energy weights. |
+| **Density profiles (CSV)** | Writes `density_profiles.csv`: one row per instrument × ERB band with mode counts, relative energy weights, `energy_provenance`, `fill_fraction`. |
 | **Plots (PNG)** | Writes `density_profiles.png` (modes + phase energies) and `size_sweep.png` (index vs cymbal diameter). |
-| **Calibration bridge** | Compares model scale to Sivian/Meyer pitched-instrument anchors → `calibration_report.md` (conversion factor + spread). |
+| **Calibration bridge** | Measured-bands-only scale bridge → `calibration_report.md` (factor + spread; sparse-coverage caveat). |
 | **Monte Carlo uncertainty** | Re-runs the model with specimen/parameter noise; exports medians and intervals (`density_profiles_mc.csv` + fan chart). |
-| **Use AmplitudeLayer** | When on, cymbals/bass drums with Sivian–Meyer coverage use measured band weights instead of equipartition. Gong/tam-tam stay on equipartition either way. |
+| **Use AmplitudeLayer** | When on, instruments with Sivian–Meyer coverage **and** fill_fraction ≤ 0.60 use measured/mixed weights; mostly-filled vectors (e.g. cymbals ≈ 0.90) refuse and keep equipartition. Gong/tam-tam stay equipartition. |
 
 ---
 
@@ -51,12 +53,13 @@ Higher draws → smoother intervals, longer runtime.
 
 | Name | Family | Notes |
 |---|---|---|
-| `cymbal_16in_thin` | plate | Table 9.1 Chladni anchor |
-| `cymbal_18in_medium` | plate | Table 9.1 Chladni anchor |
-| `cymbal_46cm_medium` | plate | Fig. 9.3 anchor; main validation / fan-chart target |
-| `gong_50cm_bronze` | plate | Scaled (no Table 9.1 row) |
-| `tamtam_80cm_bronze` | plate | Scaled |
-| `bassdrum_32in` / `28in` | membrane | Tension from nominal (1,1) frequency |
+| `cymbal_16in_thin` | plate | Table 9.1 Chladni anchor; AmplitudeLayer currently **refuses** (high fill) |
+| `cymbal_18in_medium` | plate | Table 9.1 Chladni anchor; AmplitudeLayer currently **refuses** (high fill) |
+| `cymbal_46cm_medium` | plate | Fig. 9.3 anchor; main validation / fan-chart target; AmplitudeLayer **refuses** |
+| `gong_50cm_bronze` | plate | Scaled (no Table 9.1 row); no Sivian alias |
+| `tamtam_80cm_bronze` | plate | Scaled; no Sivian alias |
+| `bassdrum_32in` | membrane | May accept `mixed_primary_and_fill` (fill ≈ 0.59) |
+| `bassdrum_28in` | membrane | Currently refuses (fill ≈ 0.87) |
 
 Uncheck instruments you do not need to speed up the run.
 
@@ -78,12 +81,12 @@ Uncheck instruments you do not need to speed up the run.
 
 | File | Contents |
 |---|---|
-| `density_profiles.csv` | Deterministic per-band profile (modes + `energy_w_*`) |
+| `density_profiles.csv` | Deterministic per-band profile (modes + `energy_w_*` + `fill_fraction`) |
 | `density_profiles_mc.csv` | Same schema + `_p05`…`_p95` columns; use **`_p50`** to cite |
 | `density_profiles_mc.meta.json` | Seed, draw counts, perturbation metadata |
 | `density_profiles_mc_fan_*.png` | Median line + 50% / 90% bands (fan chart) |
-| `calibration_report.md` | Scale factor and **spread = uncertainty** for cross-domain ratios |
-| `validation_report.md` | Only after WAV validation — measured vs model comparison |
+| `calibration_report.md` | Factor + spread; per-instrument fill_fraction / n_measured; exclusions |
+| `validation_report.md` | After recording validation — mapping table, PRIMARY / ff / skips |
 
 ---
 
@@ -106,7 +109,8 @@ Membranes use only **strike** / **decay**.
 2. Filter to your instrument.
 3. Cite `modes_per_band_p50` and `energy_w_shimmer_p50` (or the phase you need).
 4. Report the interval: `p05`–`p95` (90% band) or `p25`–`p75` (50% band).
-5. If comparing to pitched-instrument metadata, multiply/divide by the calibration factor and attach the **spread** as uncertainty.
+5. Check `energy_provenance` / `fill_fraction` on the deterministic CSV before treating absolute SPL columns as measurements.
+6. If comparing to pitched-instrument metadata, use the calibration factor and attach the **spread** as uncertainty (provisional under sparse digitization).
 
 ---
 
@@ -114,9 +118,10 @@ Membranes use only **strike** / **decay**.
 
 | Label | Meaning |
 |---|---|
-| `primary_source` | Taken from a cited table/text |
+| `primary_source` | Taken from a cited table/text (or AmplitudeLayer with ≤10% fill) |
+| `mixed_primary_and_fill` | AmplitudeLayer: measured bands + residual fill (10–60%) |
 | `derived` | Computed from primary values by stated theory |
-| `literature_derived` | Fit / read from a published figure |
+| `literature_derived` | Fit / estimate / read from a published figure |
 | `internal_default` | Engineering choice; documented, not a measurement |
 
 ---
@@ -125,8 +130,10 @@ Membranes use only **strike** / **decay**.
 
 1. Flat-plate / single-membrane idealisations  
 2. Linear regime only (not chaotic ff crashes)  
-3. Equipartition at strike is a convention (unless AmplitudeLayer applies)  
-4. Absolute 1931 levels weak above ~5 kHz (Meyer corrections recorded)  
-5. Absolute levels = single specimens, not variance (variance → MC layer)
+3. Equipartition at strike unless AmplitudeLayer **accepts** coverage (fill ≤ 0.60)  
+4. Absolute 1931 levels weak above ~5 kHz (Meyer corrections = `literature_derived`)  
+5. Absolute levels = single specimens, not variance (variance → MC layer)  
+6. Cymbal model names → Sivian clash PAIR alias (`internal_default`)  
+7. Calibration factor provisional until `needs_manual_reading` cells are filled  
 
 Full equations and file map: see **TECHNICAL_MANUAL.md**.

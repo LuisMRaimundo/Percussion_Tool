@@ -1,13 +1,15 @@
-"""Pytest suite: VAL1, VAL2, and sanity assertions from the build spec."""
+"""Pytest suite: VAL1, VAL2, AmplitudeLayer honesty, calibration, sanity."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from model import (
+    FILL_FRAC_MIXED_MAX,
     AmplitudeLayer,
     MembraneInstrument,
     PlateInstrument,
@@ -64,7 +66,6 @@ def test_erb_band_edges_span() -> None:
 def test_plate_modes_per_band_grow_with_frequency(cymbal_46: PlateInstrument) -> None:
     """Asymptotic plate n(f) constant ⇒ modes/ERB grow with ERB width."""
     prof = generate_profile(cymbal_46)
-    # Compare mid vs high geometric-mean occupation in asymptotic region.
     mid = np.mean(prof.modes_per_band[10:20])
     high = np.mean(prof.modes_per_band[-10:])
     assert high > mid
@@ -87,7 +88,7 @@ def test_csv_schema_columns(cymbal_46: PlateInstrument) -> None:
     rows = generate_profile(cymbal_46).to_rows()
     required = {
         "instrument", "family", "band_index", "f_lo_hz", "f_hi_hz",
-        "f_centre_hz", "modes_per_band", "energy_w_strike",
+        "f_centre_hz", "modes_per_band", "energy_w_strike", "fill_fraction",
     }
     assert required.issubset(rows[0].keys())
 
@@ -105,18 +106,47 @@ def test_no_coverage_bit_identical_relative_weights() -> None:
         )
 
 
-def test_coverage_changes_cymbal_weights(cymbal_46: PlateInstrument) -> None:
+def test_cymbal_high_fill_refuses_primary_label(cymbal_46: PlateInstrument) -> None:
+    """cymbals_15in is ~90% fill → no coverage; equipartition + note."""
     layer = AmplitudeLayer.default(ROOT)
-    assert layer.has_coverage(cymbal_46.name)
+    assert not layer.has_coverage(cymbal_46.name)
+    ff = layer.fill_fraction_for(cymbal_46.name)
+    assert ff is not None and ff > FILL_FRAC_MIXED_MAX
+
     base = generate_profile(cymbal_46)
-    abs_prof = generate_profile(cymbal_46, amplitude_layer=layer)
-    assert abs_prof.energy_provenance == "primary_source"
-    assert abs_prof.ref_distance_m == pytest.approx(0.9144)
-    # Relative shape should differ from equipartition once coverage applies.
-    assert not np.allclose(
-        base.energy_weights["strike"], abs_prof.energy_weights["strike"]
+    with_layer = generate_profile(cymbal_46, amplitude_layer=layer)
+    assert with_layer.energy_provenance == "internal_default"
+    assert with_layer.fill_fraction == pytest.approx(ff)
+    assert any("fill_fraction=" in n for n in with_layer.notes)
+    assert any("refused" in n.lower() for n in with_layer.notes)
+    for ph in base.energy_weights:
+        np.testing.assert_allclose(
+            base.energy_weights[ph], with_layer.energy_weights[ph], rtol=0, atol=0
+        )
+
+
+def test_equal_density_fill_narrow_band_gets_less_than_wide() -> None:
+    """With one measured HF band + residual, 20–62.5 Hz < 2000–2800 Hz."""
+    layer = AmplitudeLayer.default(ROOT)
+    lo, hi, e, is_meas, fill_frac, whole, _d = layer.historical_band_powers(
+        "cymbals_15in"
     )
-    assert "strike" in abs_prof.absolute_spl_db
+    assert fill_frac == pytest.approx(0.9, rel=1e-6)
+    assert whole == pytest.approx(9.5)
+    assert int(np.sum(is_meas)) == 1
+    i_low = int(np.where(np.isclose(lo, 20.0) & np.isclose(hi, 62.5))[0][0])
+    i_mid = int(np.where(np.isclose(lo, 2000.0) & np.isclose(hi, 2800.0))[0][0])
+    assert not is_meas[i_low] and not is_meas[i_mid]
+    assert e[i_low] < e[i_mid]
+
+
+def test_is_measured_mask_marks_only_digitized_bands() -> None:
+    layer = AmplitudeLayer.default(ROOT)
+    lo, hi, e, is_meas, _ff, _w, _d = layer.historical_band_powers("bass_viol")
+    assert int(np.sum(is_meas)) == 2
+    assert np.all(e[is_meas] > 0)
+    # No residual for bass_viol → fill bands should be zero / unmeasured empty
+    assert float(np.sum(e[~is_meas])) == pytest.approx(0.0)
 
 
 def test_energy_preserving_remap_conserves() -> None:
@@ -129,11 +159,96 @@ def test_energy_preserving_remap_conserves() -> None:
 
 
 def test_calibration_runs() -> None:
-    mean, spread, results = run_calibration(AmplitudeLayer.default(ROOT))
-    assert len(results) >= 3
-    assert np.isfinite(mean)
-    assert np.isfinite(spread)
-    assert spread >= 0.0
+    mean, spread, results, exclusions = run_calibration(AmplitudeLayer.default(ROOT))
+    assert len(results) + len(exclusions) >= 3
+    # Sparse digitization may leave few bridge members; mean finite if any.
+    if results:
+        assert np.isfinite(mean)
+        assert np.isfinite(spread)
+        assert spread >= 0.0
+        for r in results:
+            assert r.n_measured_bands >= 2
+
+
+def test_calibration_excludes_single_measured_band(tmp_path: Path) -> None:
+    """Synthetic instrument: 1 measured band + large residual → excluded."""
+    src = ROOT / "data" / "source_constants.csv"
+    df = pd.read_csv(src)
+    # Minimal edges + one measured band + whole with large residual.
+    edge_rows = df[df["record_type"] == "sivian_band_edge"].copy()
+    synth = pd.DataFrame(
+        [
+            {
+                "record_type": "sivian_meta",
+                "instrument": "synth_sparse",
+                "specimen": "",
+                "source": "test",
+                "location": "test",
+                "provenance": "internal_default",
+                "parameter": "peak_power_whole",
+                "value": 10.0,
+                "units_printed": "W",
+                "units_si": "W",
+                "value_si": 10.0,
+                "band_lo_hz": "",
+                "band_hi_hz": "",
+                "measurement_year": 1931.0,
+                "ref_distance_m": 0.9144,
+                "discrepancy_db": "",
+                "needs_manual_reading": 0,
+                "notes": "synthetic sparse",
+            },
+            {
+                "record_type": "sivian_meta",
+                "instrument": "synth_sparse",
+                "specimen": "",
+                "source": "test",
+                "location": "test",
+                "provenance": "internal_default",
+                "parameter": "peak_power_band",
+                "value": 1.0,
+                "units_printed": "W",
+                "units_si": "W",
+                "value_si": 1.0,
+                "band_lo_hz": 8000.0,
+                "band_hi_hz": 11300.0,
+                "measurement_year": 1931.0,
+                "ref_distance_m": 0.9144,
+                "discrepancy_db": "",
+                "needs_manual_reading": 0,
+                "notes": "one measured HF band",
+            },
+        ]
+    )
+    out_csv = tmp_path / "source_constants.csv"
+    pd.concat([edge_rows, synth], ignore_index=True).to_csv(out_csv, index=False)
+
+    layer = AmplitudeLayer(out_csv)
+    # Patch bridge list via monkeypatch-style: call internals directly.
+    from calibration import BridgeExclusion, _empirical_index_measured_only
+    from model import _INSTRUMENT_SOURCE_KEYS
+
+    _INSTRUMENT_SOURCE_KEYS["synth_sparse"] = "synth_sparse"
+    try:
+        assert layer.n_measured_bands("synth_sparse") == 1
+        idx, ff, n = _empirical_index_measured_only("synth_sparse", layer)
+        assert n == 1
+        assert not np.isfinite(idx)
+        assert ff > FILL_FRAC_MIXED_MAX
+        # Full run_calibration path: inject into BRIDGE_INSTRUMENTS
+        import calibration as cal
+
+        old = list(cal.BRIDGE_INSTRUMENTS)
+        cal.BRIDGE_INSTRUMENTS = [("synth_sparse", 200.0, 8)]
+        try:
+            _m, _s, results, exclusions = cal.run_calibration(layer)
+            assert results == []
+            assert any(ex.name == "synth_sparse" for ex in exclusions)
+            assert isinstance(exclusions[0], BridgeExclusion)
+        finally:
+            cal.BRIDGE_INSTRUMENTS = old
+    finally:
+        _INSTRUMENT_SOURCE_KEYS.pop("synth_sparse", None)
 
 
 def test_calibration_report_written(tmp_path: Path) -> None:
@@ -142,4 +257,13 @@ def test_calibration_report_written(tmp_path: Path) -> None:
     text = out.read_text(encoding="utf-8")
     assert "Conversion factor" in text
     assert "spread IS the uncertainty" in text
-    assert np.isfinite(mean)
+    assert "Sparse-coverage caveat" in text
+    assert "fill_fraction" in text
+    assert "Excluded from bridge" in text
+
+
+def test_meyer_hf_provenance_is_literature_derived() -> None:
+    df = pd.read_csv(ROOT / "data" / "source_constants.csv")
+    meyer = df[df["record_type"] == "meyer_hf_discrepancy"]
+    assert len(meyer) == 4
+    assert set(meyer["provenance"]) == {"literature_derived"}

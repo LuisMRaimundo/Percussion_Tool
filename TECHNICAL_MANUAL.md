@@ -39,9 +39,11 @@ demo.py                Thin headless wrapper → run_pipeline()
 model.py               Physics: plates, membranes, ERB, AmplitudeLayer
 uncertainty.py         Monte Carlo layer
 calibration.py         Scale-commensurability bridge
-validate_against_recordings.py   Standalone WAV check (no pipeline imports)
+sample_metadata.py     Filename/folder parse for validation auto-group
+validate_against_recordings.py   Standalone recording check
 data/source_constants.csv        Digitized literature constants
-tests/                           pytest (VAL1/VAL2, MC, synthetic WAV)
+pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.1)
+tests/                           pytest (VAL1/VAL2, MC, metadata, WAV)
 ```
 
 ### 2.1 Public API (stable)
@@ -50,10 +52,12 @@ tests/                           pytest (VAL1/VAL2, MC, synthetic WAV)
 |---|---|---|
 | `PlateInstrument` / `MembraneInstrument` | `model` | Instrument dataclasses |
 | `generate_profile(instr, …)` | `model` | Deterministic `DensityProfile` |
-| `AmplitudeLayer` | `model` | Measured band weights + SPL |
+| `AmplitudeLayer` | `model` | Measured/mixed band weights + SPL (with fill refusal) |
+| `FILL_FRAC_*` / `ERB_MEASURED_ENERGY_FRAC` | `model` | Provenance & calibration thresholds (`internal_default`) |
 | `run_monte_carlo(instr, n_draws, seed)` | `uncertainty` | Distributional profiles |
 | `run_pipeline(options, log)` | `nontunperc` | Full staged run |
 | `launch_gui()` | `nontunperc` | Desktop UI |
+| `parse_sample_path` / `resolve_model` | `sample_metadata` | Metadata-only validation grouping |
 
 Do not silently alter constants labelled `primary_source` in
 `data/source_constants.csv`.
@@ -66,7 +70,8 @@ Every numeric claim carries one of:
 |---|---|
 | `primary_source` | Copied from a cited table/prose value |
 | `derived` | Computed from primary values via stated theory |
-| `literature_derived` | Fitted or read from a published figure |
+| `literature_derived` | Fitted, estimated, or read from a published figure |
+| `mixed_primary_and_fill` | AmplitudeLayer initial weights: measured bands + residual fill (10–60%) |
 | `internal_default` | Tunable engineering choice, documented |
 
 ---
@@ -128,7 +133,7 @@ Fig. 9.5).
 
 1. Initial weights `e0`: equipartition over modes
    (`internal_default`), **or** AmplitudeLayer mapped weights when
-   coverage exists.
+   coverage is **accepted** (fill_fraction ≤ 0.60).
 2. Time evolution: `e(t) ∝ e0 · exp(−6.91·t / τ(f))` (60 dB convention).
 3. Plate buildup/shimmer: Gaussian boost around 4 kHz (Rossing Fig. 9.6
    observations; `literature_derived`).
@@ -175,22 +180,41 @@ Air loading and two-head coupling are **not** modelled.
 
 `AmplitudeLayer` loads `data/source_constants.csv`.
 
-### 6.1 Coverage
+### 6.1 Coverage and fill refusal
 
-Prototype names map to Sivian specimen keys (e.g. cymbals →
-`cymbals_15in`, bass drums → sized Sivian drums). Gong/tam-tam have
-**no** coverage → bit-identical equipartition path.
+Prototype names map to Sivian specimen keys via `_INSTRUMENT_SOURCE_KEYS`
+(e.g. suspended cymbals → `cymbals_15in` clash PAIR — different mechanical
+system/stroke, `internal_default` alias). Gong/tam-tam have **no** key →
+bit-identical equipartition.
+
+`historical_band_powers` returns `(lo, hi, energy, is_measured,
+fill_fraction, whole, distance)`. Digitized `peak_power_band` rows set
+`is_measured=True`. Residual `whole − Σ measured` is filled with **uniform
+spectral density** (energy ∝ bandwidth) over uncovered bands
+(`internal_default`).
+
+| fill_fraction | Provenance / action |
+|---|---|
+| ≤ 0.10 (`FILL_FRAC_PRIMARY_MAX`) | `primary_source` |
+| ≤ 0.60 (`FILL_FRAC_MIXED_MAX`) | `mixed_primary_and_fill` |
+| > 0.60 | refuse → equipartition; profile notes state fill_fraction |
+
+`has_coverage` and `erb_weights_and_spl` share these thresholds.
+`DensityProfile.fill_fraction` is exported in `to_rows()`.
 
 ### 6.2 ERB mapping (energy-preserving)
 
 Historical band energy `E_i` on `[f_lo, f_hi]` → uniform density
 `ρ_i = E_i / Δf_i`. Each ERB band receives `∫ ρ(f) df` over the
-overlap. Band edges are never resampled before this step.
+overlap. Band edges are never resampled before this step. Remap itself
+is unchanged by the fill-policy fixes; only residual placement and
+labelling changed.
 
 ### 6.3 High-frequency policy
 
 Above ~5 kHz, Meyer is preferred where Sivian is weak; corrections live
-in `discrepancy_db` rows. Reference distance for Sivian levels is
+in `meyer_hf_discrepancy` rows labelled `literature_derived` (conservative
+offsets, not figure readings). Reference distance for Sivian levels is
 typically **3 ft (0.9144 m)**.
 
 ### 6.4 Power → SPL
@@ -213,14 +237,14 @@ with `ρc ≈ 413 Pa·s/m`. Sivian “bars” (barye): `1 bar = 0.1 Pa`.
 
 | Parameter | Law | Width | Provenance |
 |---|---|---|---|
-| Thickness | lognormal | 95% span ±25% plates / ±10% membranes | `internal_default` (taper/hammering vs film) |
+| Thickness | lognormal | 95% multiplicative interval `[1/(1+f), 1+f]` (f=0.25 plates / 0.10 membranes) | `internal_default` (taper/hammering vs film) |
 | Diameter | normal | σ = 1% of nominal | `internal_default` |
 | E, ρ | normal | σ = 5% | `internal_default` (alloy/film) |
 | Chladni *p* | uniform on Table 9.1 p1–p2 class span | class span | span: `primary_source`; 46 cm → 18″ medium nearest class (`internal_default`) |
 | Decay τ, α | normal | σ = 20% | `literature_derived` fit uncertainty |
 
 Temporary material keys are registered in `MATERIALS` during a draw and
-removed afterward.
+removed in a `finally` block. **Not thread-safe** (documented limitation).
 
 ### 7.2 Aggregation
 
@@ -242,27 +266,44 @@ Default seed: `20260803`.
 
 `calibration.py` builds quasi-harmonic fixtures (partials at `n·f0`) for
 trumpet, clarinet, flute, and bass viol (string stand-in; violin
-full-band spectrum absent from Sivian 1931). Compares model composite
-indices to empirical band-power indices.
+full-band spectrum absent from Sivian 1931).
 
-**The sample standard deviation of the conversion factor across bridge
-instruments IS the uncertainty** for any cross-domain ratio claim.
+Empirical indices use **measured ERB bands only**: an ERB band counts as
+measured if >50% of its remapped energy came from `is_measured`
+historical bands (`ERB_MEASURED_ENERGY_FRAC`, `internal_default`).
+Instruments with fewer than 2 digitized measured bands, or refused
+AmplitudeLayer coverage, are **excluded** and listed in
+`calibration_report.md` with fill_fraction and n_measured.
+
+**The sample standard deviation of the conversion factor across retained
+bridge instruments IS the uncertainty** for any cross-domain ratio claim.
+Treat the factor as provisional until `needs_manual_reading` cells are
+completed (`data/README.md`).
 
 Bridge `f0` choices are `internal_default` tessitura anchors.
 
 ---
 
-## 9. Empirical validation (WAV)
+## 9. Empirical validation (recordings)
 
 `validate_against_recordings.py` is self-contained (numpy / scipy /
-soundfile + local `model` / `uncertainty` only).
+soundfile + local `model` / `uncertainty` / `sample_metadata` only).
 
-### 9.1 CLI
+### 9.1 CLI / GUI
 
 ```text
-python validate_against_recordings.py --wav-dir <folder> \
-    --instrument cymbal_46cm_medium [--out report_dir]
+python validate_against_recordings.py --gui
+python validate_against_recordings.py --cli --auto-group --wav-dir <folder>
+python validate_against_recordings.py --cli --no-auto-group --wav-dir <folder> \
+    --instrument cymbal_46cm_medium --out <report_dir>
 ```
+
+**Auto-group** (metadata only): group key = `(instrument, stroke, dynamic)`
+from filenames/folders. Never estimate physical parameters from audio
+(circularity refusal). Exact inch → catalogue; else parametric diameter +
+`internal_default` thickness. Skip pitched Thai gongs; skip unparseable
+names; chinese/splash/ride band-profile only (out of aggregate); `ff`
+labelled nonlinear-regime probe.
 
 ### 9.2 Per-file processing
 
@@ -321,7 +362,8 @@ Mylar membrane: `ρ = 1390 kg/m³`, default thickness 190 µm
 
 Minimum columns: `instrument`, `family`, `band_index`, `f_lo_hz`,
 `f_hi_hz`, `f_centre_hz`, `modes_per_band`, `energy_w_<phase>`.  
-Optional: `energy_provenance`, `ref_distance_m`, `spl_db_<phase>`.
+Also: `energy_provenance`, `ref_distance_m`, `fill_fraction` (empty when
+N/A), optional `spl_db_<phase>`.
 
 ### 12.2 `density_profiles_mc.csv`
 
@@ -341,14 +383,15 @@ pressures, Meyer levels, HF discrepancies. Extraction notes and
 ## 13. CLI reference
 
 ```text
+pip install -e ".[dev]"           # or pip install -r requirements.txt
 python nontunperc.py              # GUI
 python nontunperc.py --cli        # full headless pipeline
 python nontunperc.py --cli --no-mc
 python nontunperc.py --cli --no-plots --no-calibration
 python nontunperc.py --cli --mc-draws 500 --seed 20260803 --out <dir>
 
-python validate_against_recordings.py --wav-dir <dir> \
-    --instrument cymbal_46cm_medium --out <report_dir>
+python validate_against_recordings.py --gui
+python validate_against_recordings.py --cli --auto-group --wav-dir <dir>
 
 python -m pytest tests/ -q
 ```
@@ -357,8 +400,11 @@ python -m pytest tests/ -q
 
 ## 14. Dependencies
 
+Declared in `pyproject.toml` (`nontunperc` 0.3.1, `requires-python >=3.10`)
+and mirrored in `requirements.txt`:
+
 Python ≥ 3.10 · numpy · scipy · matplotlib · pandas · soundfile  
-(GUI: tkinter, stdlib)
+Optional `[dev]`: pytest · GUI: tkinter (stdlib)
 
 ---
 
@@ -367,10 +413,11 @@ Python ≥ 3.10 · numpy · scipy · matplotlib · pandas · soundfile
 1. **Flat-plate approximation** — dome/bow curvature not modelled.  
 2. **Linear regime** — chaotic ff broadband outside scope.  
 3. **Membranes in vacuo** — air loading / two-head coupling omitted.  
-4. **Equipartition** — convention unless AmplitudeLayer coverage applies.  
-5. **Scale commensurability** — use calibration factor; spread = uncertainty.  
-6. **1931 HF chain** — above ~5 kHz prefer Meyer; `discrepancy_db` records corrections.  
-7. **Specimen anchoring** — absolute levels = single specimens; variance via MC.
+4. **Equipartition** — convention unless AmplitudeLayer **accepts** coverage (fill ≤ 0.60).  
+5. **Scale commensurability** — use calibration factor; spread = uncertainty; factor provisional under sparse digitization.  
+6. **1931 HF chain** — above ~5 kHz prefer Meyer; `discrepancy_db` (`literature_derived`) records corrections.  
+7. **Specimen anchoring** — absolute levels = single specimens; variance via MC.  
+8. **Clash-pair alias** — suspended-cymbal model names → Sivian 15-in. clash PAIR (`internal_default`).
 
 ---
 

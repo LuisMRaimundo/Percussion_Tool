@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nontunperc"
+version = "0.3.1"
+description = "NonTunPerc — unpitched percussion spectral-density model"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "matplotlib",
+  "soundfile",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+py-modules = [
+  "model",
+  "uncertainty",
+  "calibration",
+  "nontunperc",
+  "demo",
+  "validate_against_recordings",
+  "sample_metadata",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

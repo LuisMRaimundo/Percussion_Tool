@@ -1,5 +1,35 @@
 # CHANGES
 
+## v0.3.1 — Honest AmplitudeLayer labelling, density fill, calibration, packaging
+
+- **Fix 1 — provenance / refusal:** `historical_band_powers` now returns an
+  `is_measured` mask; `fill_fraction = residual/whole` drives provenance
+  (`primary_source` ≤0.10, `mixed_primary_and_fill` ≤0.60, else refuse and
+  keep equipartition). Thresholds are module constants (`internal_default`).
+  `DensityProfile.fill_fraction` exported in `to_rows()`; notes state the
+  fraction. `has_coverage` uses the same rule. Rationale: a vector that is
+  ~90% residual fill must not be stamped `primary_source`.
+- **Fix 2 — equal-density fill:** residual power is spread over uncovered
+  historical bands ∝ bandwidth (uniform W/Hz), not equal energy per band.
+  For `cymbals_15in`, mass below 250 Hz drops from ~2.14 W (22.5% of 9.5 W)
+  under equal-energy fill to ~0.25 W (2.6%) under equal-density fill; the
+  20–62.5 Hz band receives less energy than 2000–2800 Hz. Remap mechanics
+  unchanged.
+- **Fix 3 — calibration bridge:** empirical index uses measured ERB bands
+  only (>50% energy from measured historical bands); instruments with
+  fewer than 2 measured bands are excluded and listed in
+  `calibration_report.md`, which also reports fill_fraction / n_measured
+  and carries a sparse-coverage caveat.
+- **Fix 4 — label corrections (no value changes):** four
+  `meyer_hf_discrepancy` rows re-labelled `literature_derived` (were
+  mis-tagged `primary_source`); clash-pair alias documented in CSV notes,
+  `data/README.md`, and README validity limit (8). **No `primary_source`
+  numeric value was altered.**
+- **Fix 5 — packaging:** `pyproject.toml` (`nontunperc` 0.3.1,
+  `requires-python >=3.10`) + `requirements.txt`; uncertainty docstring
+  corrected to `[1/(1+frac), (1+frac)]`; `MATERIALS` mutation noted as
+  not thread-safe.
+
 ## v0.3 — Monte Carlo uncertainty + recording validation
 
 - Added `QUICK_REFERENCE.md` (GUI/options/outputs) and `TECHNICAL_MANUAL.md` (architecture, equations, MC, validation, validity).
@@ -41,4 +71,4 @@ Audit / extension log (prototype v0.1 → v0.2). One-line rationale each.
 - Chose hemispherical spreading `I = P/(2πr²)` for power→SPL conversion as `internal_default` matching Sivian near-source estimates.
 - Chose bridge `f0` values (trumpet 233 Hz, clarinet 147 Hz, flute 349 Hz, bass_viol 49 Hz) as `internal_default` orchestral-tessitura anchors.
 - Aliased prototype cymbal/bass-drum names to Sivian specimen keys; deliberately did **not** alias gong/tam-tam (no coverage → bit-identical equipartition).
-- Residual whole-spectrum peak power after named bands is spread flat across uncovered historical bands (`internal_default` fill) so total power is conserved when only dominant bands are textual.
+- Residual whole-spectrum peak power after named bands is spread across uncovered historical bands (`internal_default` fill) so total power is conserved when only dominant bands are textual. *(Superseded in v0.3.1 by equal-density / bandwidth-proportional fill.)*
