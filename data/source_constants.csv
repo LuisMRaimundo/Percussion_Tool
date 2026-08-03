@@ -1,0 +1,149 @@
+record_type,instrument,specimen,source,location,provenance,parameter,value,units_printed,units_si,value_si,band_lo_hz,band_hi_hz,measurement_year,ref_distance_m,discrepancy_db,needs_manual_reading,notes
+rossing_table91,cymbal_24in_thin,,Rossing_2000,Table_9.1_p92,primary_source,p1,1.86,dimensionless,dimensionless,1.86,,,2000.0,,,0,n=0 family piecewise Chladni fit
+rossing_table91,cymbal_24in_thin,,Rossing_2000,Table_9.1_p92,primary_source,c1,7.7,Hz,Hz,7.7,,,2000.0,,,0,
+rossing_table91,cymbal_24in_thin,,Rossing_2000,Table_9.1_p92,primary_source,p2,1.49,dimensionless,dimensionless,1.49,,,2000.0,,,0,
+rossing_table91,cymbal_24in_thin,,Rossing_2000,Table_9.1_p92,primary_source,c2,14.2,Hz,Hz,14.2,,,2000.0,,,0,
+rossing_table91,cymbal_24in_thin,,Rossing_2000,Table_9.1_p92,primary_source,m_c,6.0,dimensionless,dimensionless,6.0,,,2000.0,,,0,"crossover m between (p1,c1) and (p2,c2)"
+rossing_table91,cymbal_18in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,p1,1.75,dimensionless,dimensionless,1.75,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,c1,10.1,Hz,Hz,10.1,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,p2,1.56,dimensionless,dimensionless,1.56,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,c2,14.1,Hz,Hz,14.1,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,m_c,5.0,dimensionless,dimensionless,5.0,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,p1,1.78,dimensionless,dimensionless,1.78,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,c1,10.6,Hz,Hz,10.6,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,p2,1.52,dimensionless,dimensionless,1.52,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,c2,15.7,Hz,Hz,15.7,,,2000.0,,,0,
+rossing_table91,cymbal_18in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,m_c,4.5,dimensionless,dimensionless,4.5,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,p1,1.65,dimensionless,dimensionless,1.65,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,c1,13.4,Hz,Hz,13.4,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,p2,1.46,dimensionless,dimensionless,1.46,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,c2,18.2,Hz,Hz,18.2,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,m_c,4.7,dimensionless,dimensionless,4.7,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,p1,1.7,dimensionless,dimensionless,1.70,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,c1,12.6,Hz,Hz,12.6,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,p2,1.43,dimensionless,dimensionless,1.43,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,c2,17.8,Hz,Hz,17.8,,,2000.0,,,0,
+rossing_table91,cymbal_18in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,m_c,3.6,dimensionless,dimensionless,3.6,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,p1,1.81,dimensionless,dimensionless,1.81,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,c1,10.8,Hz,Hz,10.8,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,p2,1.48,dimensionless,dimensionless,1.48,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,c2,18.8,Hz,Hz,18.8,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,m_c,5.0,dimensionless,dimensionless,5.0,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,p1,1.84,dimensionless,dimensionless,1.84,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,c1,12.0,Hz,Hz,12.0,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,p2,1.47,dimensionless,dimensionless,1.47,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,c2,19.5,Hz,Hz,19.5,,,2000.0,,,0,
+rossing_table91,cymbal_16in_thin,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,m_c,4.0,dimensionless,dimensionless,4.0,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,p1,1.7,dimensionless,dimensionless,1.70,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,c1,13.8,Hz,Hz,13.8,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,p2,1.53,dimensionless,dimensionless,1.53,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,c2,18.3,Hz,Hz,18.3,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_a,Rossing_2000,Table_9.1_p92,primary_source,m_c,5.0,dimensionless,dimensionless,5.0,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,p1,1.65,dimensionless,dimensionless,1.65,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,c1,15.9,Hz,Hz,15.9,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,p2,1.53,dimensionless,dimensionless,1.53,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,c2,19.4,Hz,Hz,19.4,,,2000.0,,,0,
+rossing_table91,cymbal_16in_medium,specimen_b,Rossing_2000,Table_9.1_p92,primary_source,m_c,4.3,dimensionless,dimensionless,4.3,,,2000.0,,,0,
+rossing_table91,cymbal_15in_thick,,Rossing_2000,Table_9.1_p92,primary_source,p1,1.47,dimensionless,dimensionless,1.47,,,2000.0,,,0,source table blank for p2/c2/m_c
+rossing_table91,cymbal_15in_thick,,Rossing_2000,Table_9.1_p92,primary_source,c1,20.6,Hz,Hz,20.6,,,2000.0,,,0,source table blank for p2/c2/m_c
+rossing_table91,cymbal_15in_thick,,Rossing_2000,Table_9.1_p92,primary_source,p2,,,dimensionless,dimensionless,,,,2000.0,,0,"0,blank in printed table (not illegible)"
+rossing_table91,cymbal_15in_thick,,Rossing_2000,Table_9.1_p92,primary_source,c2,,,Hz,Hz,,,,2000.0,,0,"0,blank in printed table (not illegible)"
+rossing_table91,cymbal_15in_thick,,Rossing_2000,Table_9.1_p92,primary_source,m_c,,,dimensionless,dimensionless,,,,2000.0,,0,"0,blank in printed table (not illegible)"
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f0_c,14.93,Hz,Hz,14.93,,,2000.0,,,0,f0=c*(m+0)^p; b=3 form
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f0_p,1.557,dimensionless,dimensionless,1.557,,,2000.0,,,0,
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f1_c,41.29,Hz,Hz,41.29,,,2000.0,,,0,f1=c*(m+3)^p
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f1_p,1.278,dimensionless,dimensionless,1.278,,,2000.0,,,0,
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f2_c,21.03,Hz,Hz,21.03,,,2000.0,,,0,f2=c*(m+6)^p
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f2_p,1.508,dimensionless,dimensionless,1.508,,,2000.0,,,0,
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f3_c,14.87,Hz,Hz,14.87,,,2000.0,,,0,f3=c*(m+9)^p
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f3_p,1.621,dimensionless,dimensionless,1.621,,,2000.0,,,0,
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f4_c,23.21,Hz,Hz,23.21,,,2000.0,,,0,f4=c*(m+12)^p
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f4_p,1.473,dimensionless,dimensionless,1.473,,,2000.0,,,0,
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f5_c,30.88,Hz,Hz,30.88,,,2000.0,,,0,f5=c*(m+15)^p
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,f5_p,1.398,dimensionless,dimensionless,1.398,,,2000.0,,,0,
+rossing_fig93,cymbal_46cm_medium,,Rossing_2000,Fig_9.3_p91,literature_derived,b_chladni,3.0,dimensionless,dimensionless,3.0,,,2000.0,,,0,b in m+b*n for Fig 9.3 fits
+sivian_band_edge,,band_01,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,20.0,c.p.s.,Hz,20.0,20.0,62.5,1931.0,0.9144,,0,figure axis label; method text also notes first-band lower limit 30 c.p.s.
+sivian_band_edge,,band_01,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,62.5,c.p.s.,Hz,62.5,20.0,62.5,1931.0,0.9144,,0,
+sivian_band_edge,,band_02,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,62.5,c.p.s.,Hz,62.5,62.5,125.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_02,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,125.0,c.p.s.,Hz,125.0,62.5,125.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_03,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,125.0,c.p.s.,Hz,125.0,125.0,250.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_03,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,250.0,c.p.s.,Hz,250.0,125.0,250.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_04,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,250.0,c.p.s.,Hz,250.0,250.0,500.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_04,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,500.0,c.p.s.,Hz,500.0,250.0,500.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_05,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,500.0,c.p.s.,Hz,500.0,500.0,700.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_05,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,700.0,c.p.s.,Hz,700.0,500.0,700.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_06,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,700.0,c.p.s.,Hz,700.0,700.0,1000.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_06,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,1000.0,c.p.s.,Hz,1000.0,700.0,1000.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_07,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,1000.0,c.p.s.,Hz,1000.0,1000.0,1400.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_07,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,1400.0,c.p.s.,Hz,1400.0,1000.0,1400.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_08,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,1400.0,c.p.s.,Hz,1400.0,1400.0,2000.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_08,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,2000.0,c.p.s.,Hz,2000.0,1400.0,2000.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_09,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,2000.0,c.p.s.,Hz,2000.0,2000.0,2800.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_09,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,2800.0,c.p.s.,Hz,2800.0,2000.0,2800.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_10,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,2800.0,c.p.s.,Hz,2800.0,2800.0,4000.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_10,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,4000.0,c.p.s.,Hz,4000.0,2800.0,4000.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_11,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,4000.0,c.p.s.,Hz,4000.0,4000.0,5600.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_11,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,5600.0,c.p.s.,Hz,5600.0,4000.0,5600.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_12,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,5600.0,c.p.s.,Hz,5600.0,5600.0,8000.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_12,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,8000.0,c.p.s.,Hz,8000.0,5600.0,8000.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_13,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_lo,8000.0,c.p.s.,Hz,8000.0,8000.0,11300.0,1931.0,0.9144,,0,
+sivian_band_edge,,band_13,Sivian_Dunn_White_1931,Fig_axis_labels,primary_source,band_edge_hi,11300.0,c.p.s.,Hz,11300.0,8000.0,11300.0,1931.0,0.9144,,0,band 13-A definite upper limit 11300 c.p.s.
+sivian_meta,bass_drum_A_36x15,,Sivian_Dunn_White_1931,text_p350_and_Fig59,primary_source,peak_power_whole,24.6,W,W,24.6,,,1931.0,0.9144,,0,mic on axis 3 ft; Fig.59
+sivian_meta,bass_drum_A_36x15,,Sivian_Dunn_White_1931,text_p350,primary_source,peak_pressure_zone_lo,900.0,bars,Pa,90.0,,,1931.0,0.9144,,0,6% of whole-spectrum peaks between 900 and 1800 bars; 1 bar=0.1 Pa
+sivian_meta,bass_drum_A_36x15,,Sivian_Dunn_White_1931,text_p350,primary_source,peak_pressure_zone_hi,1800.0,bars,Pa,180.0,,,1931.0,0.9144,,0,
+sivian_meta,bass_drum_A_36x15,,Sivian_Dunn_White_1931,text_p351,primary_source,peak_power_band,10.0,W,W,10.0,250.0,500.0,1931.0,0.9144,,0,approx 10 W in 1% of intervals in 250-500 band
+sivian_meta,bass_drum_B_36x15,,Sivian_Dunn_White_1931,text_p351_and_Fig59,primary_source,peak_power_whole,1.2,W,W,1.2,,,1931.0,0.9144,,0,
+sivian_meta,bass_drum_B_36x15,,Sivian_Dunn_White_1931,Fig_34,primary_source,avg_total_pressure,27.8,bars,Pa,2.78,,,1931.0,0.9144,,0,caption AV. TOTAL PRESSURE
+sivian_meta,bass_drum_C_30x12,,Sivian_Dunn_White_1931,text_p352_and_Fig59,primary_source,peak_power_whole,13.4,W,W,13.4,,,1931.0,0.9144,,0,
+sivian_meta,bass_drum_C_30x12,,Sivian_Dunn_White_1931,Fig_35,primary_source,avg_total_pressure,35.0,bars,Pa,3.5,,,1931.0,0.9144,,0,
+sivian_meta,bass_drum_C_30x12,,Sivian_Dunn_White_1931,Fig_59,primary_source,peak_power_band,1.7,W,W,1.7,125.0,250.0,1931.0,0.9144,,0,OCR of Fig.59; cross-checked with column structure
+sivian_meta,bass_drum_D_34x19,,Sivian_Dunn_White_1931,text_p353_and_Fig59,primary_source,peak_power_whole,4.9,W,W,4.9,,,1931.0,0.9144,,0,text estimates ~5 W
+sivian_meta,bass_drum_D_34x19,,Sivian_Dunn_White_1931,Fig_36,primary_source,avg_total_pressure,66.0,bars,Pa,6.6,,,1931.0,0.9144,,0,
+sivian_meta,bass_drum_D_34x19,,Sivian_Dunn_White_1931,text_p353,primary_source,peak_power_band,1.2,W,W,1.2,20.0,62.5,1931.0,0.9144,,0,highest peaks in lowest band; Fig.59 band power
+sivian_meta,cymbals_15in,,Sivian_Dunn_White_1931,text_p353_and_Fig59,primary_source,peak_power_whole,9.5,W,W,9.5,,,1931.0,0.9144,,0,distance 3 ft
+sivian_meta,cymbals_15in,,Sivian_Dunn_White_1931,Fig_38,primary_source,avg_total_pressure,15.0,bars,Pa,1.5,,,1931.0,0.9144,,0,
+sivian_meta,cymbals_15in,,Sivian_Dunn_White_1931,Fig_59,primary_source,peak_power_band,0.95,W,W,0.95,8000.0,11300.0,1931.0,0.9144,,0,highest peaks above 8000 c.p.s.
+sivian_meta,trumpet,,Sivian_Dunn_White_1931,text_p358_and_Fig59,primary_source,peak_power_whole,0.314,W,W,0.314,,,1931.0,0.9144,,0,314 milliwatts; 18% of intervals
+sivian_meta,trumpet,,Sivian_Dunn_White_1931,text_p358,primary_source,peak_power_band,0.047,W,W,0.047,250.0,500.0,1931.0,0.9144,,0,
+sivian_meta,trumpet,,Sivian_Dunn_White_1931,text_p358,primary_source,peak_power_band,0.047,W,W,0.047,500.0,700.0,1931.0,0.9144,,0,
+sivian_meta,clarinet,,Sivian_Dunn_White_1931,text_p359_and_Fig59,primary_source,peak_power_whole,0.05,W,W,0.050,,,1931.0,0.9144,,0,~50 milliwatts
+sivian_meta,clarinet,,Sivian_Dunn_White_1931,Fig_46,primary_source,avg_total_pressure,3.3,bars,Pa,0.33,,,1931.0,0.9144,,0,
+sivian_meta,clarinet,,Sivian_Dunn_White_1931,text_p359,primary_source,peak_power_band,0.005,W,W,0.005,250.0,500.0,1931.0,0.9144,,0,strongest band peaks 10 dB below whole-spectrum peaks
+sivian_meta,flute,,Sivian_Dunn_White_1931,text_p359_and_Fig59,primary_source,peak_power_whole,0.055,W,W,0.055,,,1931.0,0.9144,,0,1% of intervals to 55 mW
+sivian_meta,flute,,Sivian_Dunn_White_1931,Fig_47,primary_source,avg_total_pressure,1.6,bars,Pa,0.16,,,1931.0,0.9144,,0,
+sivian_meta,flute,,Sivian_Dunn_White_1931,text_p359,primary_source,peak_power_band,0.0045,W,W,0.0045,700.0,1000.0,1931.0,0.9144,,0,700-1000 and 1400-2000 about equally strong at ~4.5 mW
+sivian_meta,flute,,Sivian_Dunn_White_1931,text_p359,primary_source,peak_power_band,0.0045,W,W,0.0045,1400.0,2000.0,1931.0,0.9144,,0,
+sivian_meta,bass_viol,,Sivian_Dunn_White_1931,Fig_59,primary_source,peak_power_whole,0.156,W,W,0.156,,,1931.0,0.9144,,0,Fig.59; multi-pass OCR consensus 0.156 W
+sivian_meta,bass_viol,,Sivian_Dunn_White_1931,Fig_59,primary_source,peak_power_band,0.078,W,W,0.078,62.5,125.0,1931.0,0.9144,,0,Fig.59; multi-pass OCR consensus
+sivian_meta,bass_viol,,Sivian_Dunn_White_1931,Fig_59,primary_source,peak_power_band,0.078,W,W,0.078,125.0,250.0,1931.0,0.9144,,0,Fig.59; multi-pass OCR consensus
+sivian_meta,violin_soft,,Sivian_Dunn_White_1931,text_p369,primary_source,avg_total_pressure,0.52,bars,Pa,0.052,,,1931.0,0.9144,,0,softest usable audience level; 15 s average; violin full band spectrum not measured as named instrument in this paper
+sivian_meta,bass_drum_max_avg,,Sivian_Dunn_White_1931,text_p369,primary_source,avg_total_pressure,133.0,bars,Pa,13.3,,,1931.0,0.9144,,0,highest 15 s average from 36x15 drum
+sivian_meta,bass_drum_max_peak,,Sivian_Dunn_White_1931,text_p369,primary_source,peak_pressure,1250.0,bars,Pa,125.0,,,1931.0,0.9144,,0,highest peaks ~1250 bars
+sivian_band_level,bass_drum_A_36x15,,Sivian_Dunn_White_1931,Fig_33_curve,primary_source,peak_band_level_db,,,,,20,62.5,1931.0,0.9144,,1,per-band peak histogram ordinate needs manual figure reading
+sivian_band_level,bass_drum_A_36x15,,Sivian_Dunn_White_1931,Fig_7_or_avg_curve,primary_source,avg_band_level_db,,,,,20,62.5,1931.0,0.9144,,1,long-average pressure-per-cycle curve needs manual figure reading
+sivian_band_level,cymbals_15in,,Sivian_Dunn_White_1931,Fig_38_curve,primary_source,peak_band_level_db,,,,,8000,11300,1931.0,0.9144,,1,full per-band ordinates need manual figure reading; only dominant-band power filled above
+sivian_band_level,trumpet,,Sivian_Dunn_White_1931,Fig_44_curve,primary_source,peak_band_level_db,,,,,250,500,1931.0,0.9144,,1,non-dominant band ordinates need manual figure reading
+sivian_band_level,clarinet,,Sivian_Dunn_White_1931,Fig_46_curve,primary_source,peak_band_level_db,,,,,250,500,1931.0,0.9144,,1,non-dominant band ordinates need manual figure reading
+sivian_band_level,flute,,Sivian_Dunn_White_1931,Fig_47_curve,primary_source,peak_band_level_db,,,,,700,1000,1931.0,0.9144,,1,omitted lowest/highest bands noted weaker qualitatively
+sivian_band_level,violin,,Sivian_Dunn_White_1931,not_in_peak_table,primary_source,peak_band_level_db,,,,,,,1931.0,0.9144,,1,violin not in Fig.59 instrument set; only soft avg pressure available
+meyer_level,cymbal,,Meyer_2009,p135,primary_source,sound_power_level_pp,73.0,dB_re_1pW,dB_re_1pW,73.0,,,2009.0,,,0,felt mallet; Spelda 1971 via Meyer
+meyer_level,cymbal,,Meyer_2009,p135,primary_source,sound_power_level_ff,101.0,dB_re_1pW,dB_re_1pW,101.0,,,2009.0,,,0,felt mallet
+meyer_level,cymbal,,Meyer_2009,p135,primary_source,sound_power_level_pp_wood,82.0,dB_re_1pW,dB_re_1pW,82.0,,,2009.0,,,0,wooden mallet
+meyer_level,cymbal,,Meyer_2009,p135,primary_source,sound_power_level_ff_wood,111.0,dB_re_1pW,dB_re_1pW,111.0,,,2009.0,,,0,wooden mallet
+meyer_level,bass_drum,,Meyer_2009,p131,primary_source,sound_power_level_pp,67.0,dB_re_1pW,dB_re_1pW,67.0,,,2009.0,,,0,low registers
+meyer_level,bass_drum,,Meyer_2009,p131,primary_source,sound_power_level_ff,115.0,dB_re_1pW,dB_re_1pW,115.0,,,2009.0,,,0,playable dynamic range ~45 dB
+meyer_level,trumpet,,Meyer_2009,p67-68,primary_source,sound_pressure_level_pp_seq,89.0,dB_re_20uPa,dB_re_20uPa,89.0,,,2009.0,,,0,rapid sequences
+meyer_level,trumpet,,Meyer_2009,p67-68,primary_source,sound_pressure_level_ff_seq,104.0,dB_re_20uPa,dB_re_20uPa,104.0,,,2009.0,,,0,
+meyer_level,trumpet,,Meyer_2009,p68,primary_source,sound_pressure_level_forte_typical,101.0,dB_re_20uPa,dB_re_20uPa,101.0,,,2009.0,,,0,
+meyer_level,clarinet,,Meyer_2009,p91,primary_source,sound_power_level_pp_median,80.0,dB_re_1pW,dB_re_1pW,80.0,,,2009.0,,,0,
+meyer_level,clarinet,,Meyer_2009,p91,primary_source,sound_power_level_ff_median,96.0,dB_re_1pW,dB_re_1pW,96.0,,,2009.0,,,0,
+meyer_level,flute,,Meyer_2009,flute_chapter,primary_source,sound_power_level_pp_scales,82.0,dB_re_1pW,dB_re_1pW,82.0,,,2009.0,,,0,scales through two octaves; dynamic span ~12 dB
+meyer_level,flute,,Meyer_2009,flute_chapter,primary_source,sound_power_level_ff_scales,94.0,dB_re_1pW,dB_re_1pW,94.0,,,2009.0,,,0,
+meyer_level,flute,,Meyer_2009,flute_chapter,primary_source,sound_power_level_forte_avg,91.0,dB_re_1pW,dB_re_1pW,91.0,,,2009.0,,,0,
+meyer_level,violin,,Meyer_2009,p103,primary_source,sound_power_level_forte_median,89.0,dB_re_1pW,dB_re_1pW,89.0,,,2009.0,,,0,
+meyer_level,violin,,Meyer_2009,p103,primary_source,sound_power_level_ff_fast,94.0,dB_re_1pW,dB_re_1pW,94.0,,,2009.0,,,0,
+meyer_level,violin,,Meyer_2009,p103,primary_source,sound_power_level_pp_fast,74.0,dB_re_1pW,dB_re_1pW,74.0,,,2009.0,,,0,
+meyer_hf_discrepancy,cymbals_15in,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,primary_source,discrepancy_db,3.0,dB,dB,3.0,5600.0,11300.0,1931.0,0.9144,3.0,0,Sivian places peak power in 8-11.3 kHz; Meyer modern cymbal power totals preferred for absolute scale above ~5 kHz; 3 dB conservative offset recorded (not a figure reading)
+meyer_hf_discrepancy,trumpet,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,primary_source,discrepancy_db,6.0,dB,dB,6.0,5600.0,11300.0,1931.0,0.9144,6.0,0,Sivian 1931 HF chain limited; Meyer ff spectra retain substantial 3 kHz energy then fall; prefer Meyer above ~5 kHz
+meyer_hf_discrepancy,clarinet,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,primary_source,discrepancy_db,5.0,dB,dB,5.0,5600.0,11300.0,1931.0,0.9144,5.0,0,prefer Meyer above ~5 kHz
+meyer_hf_discrepancy,flute,,Meyer_2009_vs_Sivian_1931,HF_gt_5kHz,primary_source,discrepancy_db,8.0,dB,dB,8.0,5600.0,11300.0,1931.0,0.9144,8.0,0,Meyer: 3 kHz already 20-40 dB down then 15-22 dB/oct; prefer Meyer above ~5 kHz
