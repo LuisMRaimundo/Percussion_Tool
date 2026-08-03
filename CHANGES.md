@@ -1,5 +1,42 @@
 # CHANGES
 
+## v0.3.4 — (stroke, dynamic) excitation filter + tam-tam template
+
+Repairs the falsified universal equipartition / ff-shimmer convention
+with bibliography-anchored Hertzian contact-time filtering. Validation
+recordings exposed the defect but **did not fit** the repair.
+
+- **Excitation filter:** `E0(f) ∝ 1/(1+(f/f_c)^4)`, `f_c = 1/(2 t_contact)`.
+  API: `generate_profile(..., stroke=, dynamic=)`. Both unset →
+  bit-identical to v0.3.3.
+- **Contact times** (`excitation_contact_time` rows) — all currently
+  `internal_default` placeholders awaiting source-read values (FR Ch. 19.7
+  / Fig. 19.12 give qualitative / f_max curves, not unambiguous printed
+  `t_contact` in ms for these implement classes):
+
+  | implement | t_contact (mf) | notes |
+  |---|---:|---|
+  | `stick_tip` | 0.4 ms | f_c ≈ 1.25 kHz |
+  | `stick_shoulder` | 0.7 ms | |
+  | `yarn_mallet` | 3.0 ms | f_c ≈ 167 Hz |
+  | `bass_drum_beater` | 6.0 ms | |
+
+  Dynamic scale of `t_contact`: pp×1.6, mf×1.0, ff×0.6 (`internal_default`;
+  Hertz predicts only `t ∝ v^(-1/5)` — factors deliberately conservative).
+  Shimmer-boost gate: pp 0, mf ×0.5, ff full (`internal_default`).
+- **Tam-tam template** `PLATE_PHASES_TAMTAM` + `plate_class="tamtam"`;
+  HF boost in shimmer not bloom; wind gongs share the template.
+- **Validation:** passes (stroke, dynamic) into MC; stick/mallet cohorts
+  separate; optional `--baseline validation_summary.json`.
+- **MC size sweep** replaces deterministic `size_sweep.png`
+  (`size_sweep_mc.csv` + fan). Deterministic sweep deprecated for citation.
+- **Alias:** `bassdrum_82cm` → Sivian `bass_drum_A_36x15` (36 in ≈91 cm vs
+  82 cm; size-mismatch `internal_default`).
+- Package version → `0.3.4`. Docs synced: README (excitation, tam-tam,
+  validity limit 4, MC size sweep); TECHNICAL_MANUAL (§4.4–4.5, API);
+  QUICK_REFERENCE (instruments, phases, outputs); `data/README.md`
+  (contact times + 82 cm Sivian alias); `cursor_prompt_idiophone_density.md`.
+
 ## v0.3.3 — Membrane measured-mode anchor (Fletcher & Rossing Ch. 18)
 
 - Digitized Fletcher & Rossing (1998) Table 18.5 concert bass-drum modes

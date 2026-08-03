@@ -259,6 +259,7 @@ def resolve_model(meta: SampleMeta) -> ModelMapping:
             chladni=base.chladni,
             decay_tau_1k=base.decay_tau_1k,
             decay_alpha=base.decay_alpha,
+            plate_class="cymbal",
         )
         return ModelMapping(
             instrument_id=meta.instrument_id or base.name,
@@ -277,12 +278,17 @@ def resolve_model(meta: SampleMeta) -> ModelMapping:
     diameter_m = inches * INCH_M
     material = "bronze_B20"
     name = meta.instrument_id or f"{meta.plate_class}_{inches}in"
+    # Wind gongs share the tam-tam temporal template (with a note).
+    model_plate_class = (
+        "tamtam" if meta.plate_class in {"tamtam", "windgong"} else "cymbal"
+    )
     instr = PlateInstrument(
         name=name,
         diameter=diameter_m,
         thickness=thickness,
         material=material,
         chladni=None,  # scaled internal_default via PlateInstrument.low_modes
+        plate_class=model_plate_class,
     )
     return ModelMapping(
         instrument_id=name,

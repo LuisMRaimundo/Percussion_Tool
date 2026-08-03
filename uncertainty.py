@@ -229,6 +229,8 @@ def run_monte_carlo(
     n_draws: int = 2000,
     seed: int = DEFAULT_SEED,
     amplitude_layer=None,
+    stroke: Optional[str] = None,
+    dynamic: Optional[str] = None,
 ) -> MonteCarloResult:
     """Perturb instrument parameters and aggregate profile distributions.
 
@@ -243,6 +245,9 @@ def run_monte_carlo(
     amplitude_layer
         Optional ``AmplitudeLayer``; default ``None`` so the MC isolates
         physical-parameter uncertainty (internal_default).
+    stroke, dynamic
+        Forwarded to ``generate_profile`` (contact-time excitation filter).
+        Both ``None`` keeps the v0.3.3 equipartition path.
     """
     rng = np.random.default_rng(seed)
     p_span = None
@@ -266,7 +271,12 @@ def run_monte_carlo(
             else:
                 draw = _perturb_membrane(instrument, rng)
 
-            prof = generate_profile(draw, amplitude_layer=amplitude_layer)
+            prof = generate_profile(
+                draw,
+                amplitude_layer=amplitude_layer,
+                stroke=stroke,
+                dynamic=dynamic,
+            )
             if band_edges is None:
                 band_edges = prof.band_edges.copy()
                 band_centres = prof.band_centres.copy()

@@ -1,4 +1,4 @@
-# NonTunPerc — non-tuned percussion density model (v0.3.3)
+# NonTunPerc — non-tuned percussion density model (v0.3.4)
 
 A bibliography-based, parametric model that generates **ERB-band spectral
 density profiles** for unpitched percussion from physical input parameters
@@ -86,6 +86,21 @@ energy transfer (Rossing, 2000, Fig. 9.6, observations 2–4). Where the
 AmplitudeLayer **accepts** coverage (fill_fraction ≤ 0.60), equipartition
 is replaced by measured / mixed band weights (see §3); mostly-filled
 vectors are refused.
+
+**Excitation filter (v0.3.4):** when `generate_profile(..., stroke=, dynamic=)`
+are both set, the initial energy is low-passed by a Hertzian contact-time
+filter `E0(f) ∝ 1/(1+(f/f_c)^4)` with `f_c ≈ 1/(2 t_contact)`. Contact
+times load from `excitation_contact_time` rows (source-read wins);
+placeholders (`internal_default`) are flagged in profile notes. Dynamic
+scales `t_contact` (pp×1.6, mf×1.0, ff×0.6; Hertz predicts only weak
+`t ∝ v^(-1/5)` — factors are deliberately conservative). The 3–5 kHz
+shimmer boost is dynamic-gated (pp off, mf ×0.5, ff full). With both
+`stroke` and `dynamic` unset, behaviour is bit-identical to v0.3.3.
+
+**Tam-tam template:** `plate_class="tamtam"` selects
+`PLATE_PHASES_TAMTAM` (strike / bloom / shimmer / residue) with HF
+emphasis in shimmer only — matching the slow nonlinear buildup
+([R] tam-tam; [FR] Ch. 20). Wind gongs use the same template with a note.
 
 ### 2.2 Membranes (bass drum)
 
@@ -182,7 +197,10 @@ chart for the 46-cm cymbal.
 **Reporting rule:** point estimates from the deterministic
 `generate_profile` path are **deprecated for citation**. The citable
 output is the MC median with nested percentile intervals (symmetry with
-the companion empirical pipeline's bootstrap-CI convention).
+the companion empirical pipeline's bootstrap-CI convention). The size
+sweep is likewise an **MC fan** along diameter (`size_sweep_mc.csv` +
+`size_sweep.png`); the old deterministic size sweep is deprecated for
+citation like all point estimates.
 
 ## 6. Empirical validation against recordings
 
@@ -193,9 +211,17 @@ folder metadata only — never by fitting physical parameters from audio.
 ```text
 python validate_against_recordings.py --gui
 python validate_against_recordings.py --cli --auto-group --wav-dir <folder>
+python validate_against_recordings.py --cli --auto-group --wav-dir <folder> \
+    --baseline validation_summary.json
 python validate_against_recordings.py --cli --no-auto-group --wav-dir <folder> \
     --instrument cymbal_46cm_medium [--out report_dir]
 ```
+
+Auto-group passes each group's `(stroke, dynamic)` into the model
+(contact-time filter + tam-tam template). PRIMARY gates are unchanged;
+stick and mallet cohorts are reported separately. Optional `--baseline`
+prints previous vs new ρ per group.
+
 
 It mono-mixes / resamples audio to 44.1 kHz, detects onsets (10× noise
 floor), segments with the model's plate phase windows, computes Welch
@@ -234,11 +260,12 @@ strike `n//2`; 50% overlap (documented in the script).
    bias applies **only above the anchored range**. Without the anchor,
    air loading and two-head coupling are not modelled and the lowest
    bass-drum modes are overestimated in frequency.
-4. **Equipartition at excitation** is a stated convention, not a
-   measurement; stroke type and striking point are not yet parameters.
-   AmplitudeLayer replaces this only when digitized coverage exists **and**
-   residual fill_fraction ≤ 0.60; mostly-filled vectors are refused and
-   equipartition (`internal_default`) is kept.
+4. **Excitation.** Stroke and dynamic **are** parameters via the
+   contact-time filter when both are supplied; striking **position**
+   remains unmodelled. With stroke/dynamic unset, equipartition
+   (`internal_default`) is kept (v0.3.3 path). AmplitudeLayer replaces
+   the initial vector only when digitized coverage exists **and**
+   residual fill_fraction ≤ 0.60; mostly-filled vectors are refused.
 5. **Scale commensurability.** Indices are on the model's own scale.
    Ratio comparisons against empirically derived (Iowa/OrchideaSOL)
    pitched-instrument metadata require the calibration bridge:

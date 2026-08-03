@@ -18,6 +18,7 @@ from model import (
     fit_effective_wave_speed,
     generate_profile,
     energy_preserving_remap,
+    load_contact_time_s,
     make_bassdrum_catalogue,
     measured_modes_from_csv,
     membrane_beta,
@@ -468,3 +469,135 @@ def test_bassdrum_size_scaling_uses_fitted_c_not_copied_freqs() -> None:
     )
     prof = generate_profile(d32)
     assert any("internal_default" in n for n in prof.notes)
+
+
+def _hf_share(prof, phase: str = "strike", fmin: float = 3000.0) -> float:
+    w = prof.energy_weights[phase]
+    m = prof.band_centres >= fmin
+    return float(w[m].sum())
+
+
+def test_generate_profile_stroke_none_bit_identical_v033() -> None:
+    """stroke=dynamic=None reproduces v0.3.3 path for cymbal and anchored drum."""
+    cy = PlateInstrument(
+        "cymbal_46cm_medium", 0.460, 0.0012, chladni=(14.93, 3.0, 1.557)
+    )
+    a = generate_profile(cy)
+    b = generate_profile(cy, stroke=None, dynamic=None)
+    for ph in a.energy_weights:
+        np.testing.assert_allclose(
+            a.energy_weights[ph], b.energy_weights[ph], rtol=0, atol=0
+        )
+    drum = next(
+        i
+        for i in make_bassdrum_catalogue(ROOT / "data" / "source_constants.csv")
+        if i.name == "bassdrum_82cm"
+    )
+    da = generate_profile(drum)
+    db = generate_profile(drum, stroke=None, dynamic=None)
+    for ph in da.energy_weights:
+        np.testing.assert_allclose(
+            da.energy_weights[ph], db.energy_weights[ph], rtol=0, atol=0
+        )
+
+
+def test_excitation_hf_monotonic_dynamic_and_stroke() -> None:
+    cy = PlateInstrument(
+        "cymbal_46cm_medium", 0.460, 0.0012, chladni=(14.93, 3.0, 1.557)
+    )
+    shares = [
+        _hf_share(generate_profile(cy, stroke="stick.normal", dynamic=d))
+        for d in ("pp", "mf", "ff")
+    ]
+    assert shares[0] <= shares[1] <= shares[2]
+    mal = _hf_share(generate_profile(cy, stroke="mallet", dynamic="mf"))
+    tip = _hf_share(generate_profile(cy, stroke="stick.normal", dynamic="mf"))
+    assert mal < tip
+
+
+def test_tamtam_template_early_hf_and_shimmer_gate() -> None:
+    tt = PlateInstrument(
+        "tamtam_80cm_bronze", 0.800, 0.0015, plate_class="tamtam"
+    )
+    cy = PlateInstrument(
+        "cymbal_same_size", 0.800, 0.0015, plate_class="cymbal"
+    )
+    pt = generate_profile(tt, stroke="mallet", dynamic="mf")
+    pc = generate_profile(cy, stroke="mallet", dynamic="mf")
+    assert "bloom" in pt.energy_weights
+    assert "buildup" in pc.energy_weights
+    # ~0.2 s: tam-tam still in bloom (no HF boost); cymbal already in shimmer
+    assert _hf_share(pt, "bloom") < _hf_share(pc, "shimmer")
+    # Shimmer emphasis active and dynamic-gated on tam-tams
+    pp = generate_profile(tt, stroke="mallet", dynamic="pp")
+    ff = generate_profile(tt, stroke="mallet", dynamic="ff")
+    assert _hf_share(ff, "shimmer") > _hf_share(pp, "shimmer")
+
+
+def test_contact_time_source_wins_over_placeholder(tmp_path: Path) -> None:
+    src = pd.read_csv(ROOT / "data" / "source_constants.csv")
+    # Inject a primary_source stick_tip that differs from the placeholder.
+    src = src[src["instrument"] != "stick_tip"]
+    row = {
+        "record_type": "excitation_contact_time",
+        "instrument": "stick_tip",
+        "specimen": "",
+        "source": "Fletcher_Rossing_1998",
+        "location": "Ch19_test_inject",
+        "provenance": "primary_source",
+        "parameter": "t_contact_s",
+        "value": 0.00055,
+        "units_printed": "s",
+        "units_si": "s",
+        "value_si": 0.00055,
+        "band_lo_hz": "",
+        "band_hi_hz": "",
+        "measurement_year": 1998.0,
+        "ref_distance_m": "",
+        "discrepancy_db": "",
+        "needs_manual_reading": 0,
+        "notes": "test inject",
+    }
+    src = pd.concat([src, pd.DataFrame([row])], ignore_index=True)
+    csv_path = tmp_path / "source_constants.csv"
+    src.to_csv(csv_path, index=False)
+    t, prov, used_ph = load_contact_time_s("stick_tip", csv_path=csv_path)
+    assert t == pytest.approx(0.00055)
+    assert prov == "primary_source"
+    assert used_ph is False
+    cy = PlateInstrument(
+        "cymbal_46cm_medium", 0.460, 0.0012, chladni=(14.93, 3.0, 1.557)
+    )
+    # Placeholder path flags notes
+    ph = generate_profile(
+        cy, stroke="stick.normal", dynamic="mf",
+        csv_path=ROOT / "data" / "source_constants.csv",
+    )
+    assert any("placeholder" in n for n in ph.notes)
+
+
+def test_bassdrum_82cm_amplitude_alias() -> None:
+    layer = AmplitudeLayer.default(ROOT)
+    assert layer.has_coverage("bassdrum_82cm")
+    ff = layer.fill_fraction_for("bassdrum_82cm")
+    assert ff is not None and ff == pytest.approx(0.5934959349593496, rel=1e-6)
+
+
+def test_size_sweep_mc_medians_monotone_intervals_nested() -> None:
+    from uncertainty import run_monte_carlo
+
+    sizes = np.linspace(0.30, 0.60, 7)
+    rows = []
+    for d in sizes:
+        mc = run_monte_carlo(
+            PlateInstrument(f"cymbal_{d:.2f}", d, 0.0012),
+            n_draws=80,
+            seed=20260803,
+        )
+        c = mc.composite_quantiles["shimmer"]
+        rows.append(c)
+    meds = [r["p50"] for r in rows]
+    # Modal density grows with area ⇒ composite index non-decreasing in diameter
+    assert all(meds[i] <= meds[i + 1] + 1e-9 for i in range(len(meds) - 1))
+    for r in rows:
+        assert r["p05"] <= r["p25"] <= r["p50"] <= r["p75"] <= r["p95"]

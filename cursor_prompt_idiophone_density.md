@@ -1,4 +1,4 @@
-# Normative build specification (v0.3.3)
+# Normative build specification (v0.3.4)
 
 In-repo checklist aligned with current `README.md`, `model.py`, and
 `tests/`. Do not treat this file as a primary source for physical
@@ -28,6 +28,9 @@ is equal-density (∝ bandwidth), not equal energy per band.
 - Phase windows (plates): strike 0–20 ms; buildup 20–150 ms;
   shimmer 0.15–2 s; residue 2–6 s
 - Phase windows (membranes): strike 0–50 ms; decay 50–1000 ms
+- Excitation: Hertzian `E0 ∝ 1/(1+(f/f_c)^4)` when stroke+dynamic set;
+  shimmer boost dynamic-gated; bit-identical if both unset
+- Tam-tam: `PLATE_PHASES_TAMTAM`; HF boost in shimmer not bloom
 
 ## Validation
 

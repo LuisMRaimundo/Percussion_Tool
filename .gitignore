@@ -13,6 +13,7 @@ density_profiles_mc.csv
 density_profiles_mc.meta.json
 density_profiles_mc_fan_*.png
 size_sweep.png
+size_sweep_mc.csv
 calibration_report.md
 validation_out/
 

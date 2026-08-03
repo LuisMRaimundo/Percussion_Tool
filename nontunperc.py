@@ -67,7 +67,12 @@ def default_instruments() -> List:
             "cymbal_46cm_medium", 0.460, 0.0012, chladni=(14.93, 3.0, 1.557)
         ),
         PlateInstrument("gong_50cm_bronze", 0.500, 0.0020),
-        PlateInstrument("tamtam_80cm_bronze", 0.800, 0.0015),
+        PlateInstrument(
+            "tamtam_80cm_bronze",
+            0.800,
+            0.0015,
+            plate_class="tamtam",
+        ),
     ]
     return plates + make_bassdrum_catalogue(ROOT / "data" / "source_constants.csv")
 
@@ -228,6 +233,22 @@ def run_pipeline(
         profiles = [
             generate_profile(i, amplitude_layer=layer) for i in instruments
         ]
+        for i, p in zip(instruments, profiles):
+            pclass = getattr(i, "plate_class", None)
+            if p.stroke is None and p.dynamic is None:
+                _log(
+                    f"[EXC ] {p.instrument}: legacy equipartition "
+                    f"(stroke/dynamic unset; bit-identical v0.3.3 path)"
+                    + (f"; plate_class={pclass}" if pclass else ""),
+                    log,
+                )
+            else:
+                _log(
+                    f"[EXC ] {p.instrument}: stroke={p.stroke}, "
+                    f"dynamic={p.dynamic}, t_contact={p.t_contact_s}, "
+                    f"f_c={p.f_c_hz}, provenance={p.t_contact_provenance}",
+                    log,
+                )
 
     if opt.run_profiles and profiles:
         rows = []
@@ -304,24 +325,62 @@ def run_pipeline(
         _log(f"[OUT ] {png1.name}", log)
         summary["outputs"].append(str(png1))
 
+        # MC size sweep (replaces deterministic point estimates for citation).
         sizes = np.linspace(0.30, 0.60, 7)
-        vals = []
+        sweep_rows = []
+        medians = []
+        p25s, p75s, p05s, p95s = [], [], [], []
+        n_sweep = min(400, max(50, opt.mc_draws_other))
         for d in sizes:
             inst = PlateInstrument(f"cymbal_{d:.2f}", d, 0.0012)
-            vals.append(generate_profile(inst).composite_index("shimmer"))
+            mc = run_monte_carlo(
+                inst, n_draws=n_sweep, seed=opt.mc_seed
+            )
+            # shimmer composite distribution across draws
+            comps = []
+            # Recompute composites from stored energy weights percentiles
+            # via the MC result's composite stacks if available.
+            cstack = mc.composite_quantiles["shimmer"]
+            row = {
+                "diameter_m": float(d),
+                "diameter_cm": float(d * 100),
+                "n_draws": n_sweep,
+                "seed": opt.mc_seed,
+            }
+            for lab in ("p05", "p25", "p50", "p75", "p95"):
+                row[lab] = float(cstack[lab])
+            sweep_rows.append(row)
+            medians.append(row["p50"])
+            p25s.append(row["p25"])
+            p75s.append(row["p75"])
+            p05s.append(row["p05"])
+            p95s.append(row["p95"])
+
+        sweep_csv = out / "size_sweep_mc.csv"
+        with open(sweep_csv, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(sweep_rows[0].keys()))
+            w.writeheader()
+            w.writerows(sweep_rows)
+        _log(f"[OUT ] {sweep_csv.name}", log)
+        summary["outputs"].append(str(sweep_csv))
+
         fig2, ax2 = plt.subplots(figsize=(5.2, 3.6))
-        ax2.plot(sizes * 100, vals, "o-")
+        x = sizes * 100
+        ax2.fill_between(x, p05s, p95s, alpha=0.20, label="90% band")
+        ax2.fill_between(x, p25s, p75s, alpha=0.35, label="50% band")
+        ax2.plot(x, medians, "o-", color="C0", label="median")
         ax2.set(
             xlabel="cymbal diameter (cm)",
             ylabel="composite density index (shimmer)",
-            title="Size sweep (h = 1.2 mm, bronze)",
+            title=f"MC size sweep (h=1.2 mm, bronze, N={n_sweep})",
         )
         ax2.grid(alpha=0.3)
+        ax2.legend(fontsize=8)
         fig2.tight_layout()
         png2 = out / "size_sweep.png"
         fig2.savefig(png2, dpi=150)
         plt.close(fig2)
-        _log(f"[OUT ] {png2.name}", log)
+        _log(f"[OUT ] {png2.name} (MC; deterministic sweep deprecated)", log)
         summary["outputs"].append(str(png2))
 
     if opt.run_calibration:

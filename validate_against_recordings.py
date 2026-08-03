@@ -44,6 +44,7 @@ from model import (
     PlateInstrument,
     erb_band_edges,
     generate_profile,
+    map_stroke_to_implement,
 )
 from sample_metadata import (
     ModelMapping,
@@ -583,21 +584,33 @@ def _run_one_group(
     file_results = [analyse_file(m.path, edges) for m in metas]
     meas_med, meas_spread = aggregate_weights(file_results, "shimmer")
 
+    stroke = metas[0].stroke or "unmarked"
+    dynamic = metas[0].dynamic or "mf"
+    implement = map_stroke_to_implement(
+        stroke,
+        plate_class=mapping.plate_class,
+        family="plate",
+    )
     cache_key = (
         mapping.instrument.name,
         mapping.diameter_m,
         mapping.thickness_m,
         mapping.catalogue_match,
+        stroke,
+        dynamic,
+        getattr(mapping.instrument, "plate_class", "cymbal"),
     )
     if cache_key not in mc_cache:
         mc_cache[cache_key] = run_monte_carlo(
-            mapping.instrument, n_draws=mc_draws, seed=mc_seed
+            mapping.instrument,
+            n_draws=mc_draws,
+            seed=mc_seed,
+            stroke=stroke,
+            dynamic=dynamic,
         )
     mc = mc_cache[cache_key]
     metrics = compare_to_model(meas_med, mc, phase="shimmer")
 
-    stroke = metas[0].stroke or "?"
-    dynamic = metas[0].dynamic or "?"
     fig_name = _slug(
         [mapping.instrument_id, stroke, dynamic, "comparison"]
     ) + ".png"
@@ -616,10 +629,16 @@ def _run_one_group(
         metrics["spearman_rho"] >= _AGG_RHO_MIN
         and metrics["frac_inside_90"] >= _AGG_INSIDE90_MIN
     )
+    is_mallet = implement == "yarn_mallet" or stroke == "mallet"
     return {
         "instrument_id": mapping.instrument_id,
         "stroke": stroke,
         "dynamic": dynamic,
+        "implement": implement,
+        "stroke_mapping": (
+            f"{stroke} → {implement} (internal_default mapping)"
+        ),
+        "cohort": "mallet" if is_mallet else "stick",
         "n_files": len(file_results),
         "files": [str(m.path) for m in metas],
         "plate_class": mapping.plate_class,
@@ -647,6 +666,26 @@ def _run_one_group(
     }
 
 
+def _cohort_aggregate(groups: Sequence[dict]) -> dict:
+    rhos = [g["metrics"]["spearman_rho"] for g in groups]
+    insides = [g["metrics"]["frac_inside_90"] for g in groups]
+    n_support = sum(1 for g in groups if g["group_supports_profile"])
+    n = len(groups)
+    if n == 0:
+        verdict = "no groups"
+    elif n_support >= max(1, (n + 1) // 2):
+        verdict = "PASS (majority support profile)"
+    else:
+        verdict = "FAIL (majority below gate)"
+    return {
+        "n": n,
+        "n_support": n_support,
+        "median_rho": float(np.median(rhos)) if rhos else float("nan"),
+        "median_inside90": float(np.median(insides)) if insides else float("nan"),
+        "verdict": verdict,
+    }
+
+
 def write_grouped_report(
     out_dir: Path,
     sample_dir: Path,
@@ -657,6 +696,7 @@ def write_grouped_report(
     ff_groups: Sequence[dict],
     caution_groups: Sequence[dict],
     aggregate: dict,
+    baseline: Optional[dict] = None,
 ) -> Path:
     path = out_dir / "validation_report.md"
     lines: List[str] = [
@@ -670,6 +710,12 @@ def write_grouped_report(
         "folders). Physical parameters are **never** estimated from the",
         "audio. Fitting diameter/thickness to the same recordings under",
         "test would be circular and is refused.",
+        "",
+        "The Iowa-sample recordings exposed the equipartition / universal",
+        "shimmer-boost defect but **did not fit the contact-time repair** —",
+        "the fix is bibliography-anchored (Hertzian impact / FR Ch. 19;",
+        "Rossing Fig. 9.6 gating) and remains out-of-sample with respect to",
+        "these WAVs.",
         "",
         "## Skipped files",
         "",
@@ -733,6 +779,10 @@ def write_grouped_report(
                     "distinct from tam-tam)."
                 )
             m = g["metrics"]
+            if g.get("stroke_mapping"):
+                lines.append(f"- Stroke mapping: `{g['stroke_mapping']}`")
+            if g.get("cohort"):
+                lines.append(f"- Cohort: **{g['cohort']}**")
             lines.append(
                 f"- Spearman ρ = **{m['spearman_rho']:.4f}** "
                 f"(p={m['spearman_p']:.3g})"
@@ -795,8 +845,33 @@ def write_grouped_report(
         "that direction is **corroborating**, not a failure.",
     )
 
+    stick_prim = [g for g in primary_groups if g.get("cohort") == "stick"]
+    mallet_prim = [g for g in primary_groups if g.get("cohort") == "mallet"]
+    stick_agg = aggregate.get("stick") or _cohort_aggregate(stick_prim)
+    mallet_agg = aggregate.get("mallet") or _cohort_aggregate(mallet_prim)
+
     lines += [
-        "## Aggregate pass/fail (PRIMARY only)",
+        "## Aggregate pass/fail (PRIMARY only, by cohort)",
+        "",
+        "PRIMARY gate unchanged (ρ ≥ 0.5, inside90 ≥ 0.4). Stick and mallet",
+        "cohorts are reported **separately** (a single pooled median hid",
+        "stroke structure in earlier runs).",
+        "",
+        "### Stick cohort",
+        "",
+        f"- Groups: **{stick_agg['n']}**; supporting: **{stick_agg['n_support']}**",
+        f"- Median Spearman ρ: **{stick_agg['median_rho']:.4f}**",
+        f"- Median inside-90: **{stick_agg['median_inside90']:.4f}**",
+        f"- Verdict: **{stick_agg['verdict']}**",
+        "",
+        "### Mallet cohort",
+        "",
+        f"- Groups: **{mallet_agg['n']}**; supporting: **{mallet_agg['n_support']}**",
+        f"- Median Spearman ρ: **{mallet_agg['median_rho']:.4f}**",
+        f"- Median inside-90: **{mallet_agg['median_inside90']:.4f}**",
+        f"- Verdict: **{mallet_agg['verdict']}**",
+        "",
+        "### Pooled PRIMARY (informational)",
         "",
         f"- PRIMARY groups counted: **{aggregate['n_primary']}**",
         f"- Supporting profile "
@@ -809,6 +884,52 @@ def write_grouped_report(
         "chinese/splash/ride and all `ff` groups are excluded from this "
         "aggregate by design.",
         "",
+    ]
+
+    # Baseline comparison (optional --baseline validation_summary.json)
+    lines += [
+        "## What changed vs previous run",
+        "",
+    ]
+    if baseline is None:
+        lines += [
+            "_No baseline supplied._ Re-run on the same Samples folder with",
+            "`--baseline validation_summary.json` from a prior run to print",
+            "per-group previous ρ next to the new ρ.",
+            "",
+        ]
+    else:
+        prev_groups = {}
+        for section in ("primary_groups", "ff_groups", "caution_groups"):
+            for g in baseline.get(section, []):
+                key = (g.get("instrument_id"), g.get("stroke"), g.get("dynamic"))
+                prev_groups[key] = g.get("metrics", {}).get("spearman_rho")
+        lines += [
+            "Per-group Spearman ρ vs baseline. The recordings exposed the",
+            "defect but did not fit the contact-time repair (bibliography-",
+            "anchored; out-of-sample convention).",
+            "",
+            "| instrument | stroke | dynamic | previous ρ | new ρ | Δ |",
+            "|---|---|---|---:|---:|---:|",
+        ]
+        all_g = list(primary_groups) + list(ff_groups) + list(caution_groups)
+        for g in all_g:
+            key = (g["instrument_id"], g["stroke"], g["dynamic"])
+            new_r = g["metrics"]["spearman_rho"]
+            old_r = prev_groups.get(key)
+            if old_r is None or not np.isfinite(old_r):
+                delta = "—"
+                old_s = "—"
+            else:
+                delta = f"{new_r - old_r:+.4f}"
+                old_s = f"{old_r:.4f}"
+            lines.append(
+                f"| `{g['instrument_id']}` | {g['stroke']} | {g['dynamic']} | "
+                f"{old_s} | {new_r:.4f} | {delta} |"
+            )
+        lines.append("")
+
+    lines += [
         "## Claims scope (reminder)",
         "",
         "- Supports relative shimmer band-profile / rank order when PRIMARY "
@@ -827,11 +948,17 @@ def run_validation_auto(
     mc_draws: int = 400,
     mc_seed: int = DEFAULT_SEED,
     recursive: bool = True,
+    baseline_path: Optional[Path] = None,
 ) -> dict:
     """Metadata-only auto-group validation across a sample tree."""
     wav_dir = Path(wav_dir)
     out_dir = Path(out_dir) if out_dir else ROOT / "validation_out"
     out_dir.mkdir(parents=True, exist_ok=True)
+    baseline = None
+    if baseline_path is not None:
+        bp = Path(baseline_path)
+        if bp.is_file():
+            baseline = json.loads(bp.read_text(encoding="utf-8"))
 
     wavs = find_sample_files(wav_dir, recursive=recursive)
     if not wavs:
@@ -904,6 +1031,8 @@ def run_validation_auto(
     else:
         verdict = "FAIL (majority of PRIMARY groups below gate)"
 
+    stick_prim = [g for g in primary_groups if g.get("cohort") == "stick"]
+    mallet_prim = [g for g in primary_groups if g.get("cohort") == "mallet"]
     aggregate = {
         "n_primary": n_primary,
         "n_support": n_support,
@@ -912,6 +1041,8 @@ def run_validation_auto(
         "verdict": verdict,
         "rho_min": _AGG_RHO_MIN,
         "inside90_min": _AGG_INSIDE90_MIN,
+        "stick": _cohort_aggregate(stick_prim),
+        "mallet": _cohort_aggregate(mallet_prim),
     }
 
     report = write_grouped_report(
@@ -924,6 +1055,7 @@ def run_validation_auto(
         ff_groups,
         caution_groups,
         aggregate,
+        baseline=baseline,
     )
 
     def _slim(g: dict) -> dict:
@@ -975,6 +1107,7 @@ def run_validation(
     mc_seed: int = DEFAULT_SEED,
     recursive: bool = True,
     auto_group: bool = False,
+    baseline_path: Optional[Path] = None,
 ) -> dict:
     """Run the full validation pipeline; write report + figure."""
     if auto_group:
@@ -984,6 +1117,7 @@ def run_validation(
             mc_draws=mc_draws,
             mc_seed=mc_seed,
             recursive=recursive,
+            baseline_path=baseline_path,
         )
 
     wav_dir = Path(wav_dir)
@@ -1378,6 +1512,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--no-auto-group", action="store_true",
         help="force single-instrument manual mode",
     )
+    ap.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="prior validation_summary.json for per-group rho comparison",
+    )
     ap.add_argument("--gui", action="store_true", help="force GUI")
     ap.add_argument("--cli", action="store_true", help="require CLI (needs --wav-dir)")
     args = ap.parse_args(argv)
@@ -1404,6 +1544,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mc_seed=args.mc_seed,
         recursive=not args.no_recursive,
         auto_group=auto_group,
+        baseline_path=args.baseline,
     )
     if summary.get("mode") == "auto_group":
         agg = summary["aggregate"]
@@ -1412,10 +1553,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"unparseable={summary['n_unparseable']} groups={summary['n_groups']}"
         )
         print(
-            f"[AGG] {agg['verdict']}  "
+            f"[AGG] pooled {agg['verdict']}  "
             f"median_rho={agg['median_rho']:.4f}  "
             f"median_inside90={agg['median_inside90']:.4f}"
         )
+        for cohort in ("stick", "mallet"):
+            c = agg.get(cohort) or {}
+            print(
+                f"[AGG] {cohort}: {c.get('verdict', '?')}  "
+                f"n={c.get('n', 0)}  median_rho={c.get('median_rho', float('nan')):.4f}"
+            )
     else:
         print(
             f"[VAL] files={summary['n_files']}  "

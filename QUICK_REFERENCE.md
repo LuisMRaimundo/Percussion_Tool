@@ -1,7 +1,7 @@
 # NonTunPerc — Quick reference
 
 One-page guide to the GUI options, outputs, and everyday use.
-Version **0.3.3**.
+Version **0.3.4**.
 
 ---
 
@@ -29,9 +29,9 @@ From physical parameters (size, thickness/tension, material), NonTunPerc predict
 
 | Option | Meaning |
 |---|---|
-| **VAL1 / VAL2 / VAL3 checks** | VAL1/VAL2: 46 cm cymbal modal density and Chladni fit. VAL3: `bassdrum_82cm` reproduces FR Table 18.5; prints in-vacuo bias table. |
+| **VAL1 / VAL2 / VAL3 checks** | VAL1/VAL2: 46 cm cymbal. VAL3: `bassdrum_82cm` vs FR Table 18.5. CLI also prints `[EXC ]` excitation state per instrument. |
 | **Density profiles (CSV)** | Writes `density_profiles.csv`: one row per instrument × ERB band with mode counts, relative energy weights, `energy_provenance`, `fill_fraction`. |
-| **Plots (PNG)** | Writes `density_profiles.png` (modes + phase energies) and `size_sweep.png` (index vs cymbal diameter). |
+| **Plots (PNG)** | Writes `density_profiles.png` and MC `size_sweep.png` / `size_sweep_mc.csv` (fan along diameter; deterministic sweep deprecated). |
 | **Calibration bridge** | Theory-side partials vs measured-bands-only empirical index → `calibration_report.md`. Needs >=2 survivors; otherwise **NO CALIBRATION ACHIEVED**. |
 | **Monte Carlo uncertainty** | Re-runs the model with specimen/parameter noise; exports medians and intervals (`density_profiles_mc.csv` + fan chart). |
 | **Use AmplitudeLayer** | When on, instruments with Sivian–Meyer coverage **and** fill_fraction ≤ 0.60 use measured/mixed weights; mostly-filled vectors (e.g. cymbals ≈ 0.90) refuse and keep equipartition. Gong/tam-tam stay equipartition. |
@@ -59,7 +59,7 @@ Higher draws → smoother intervals, longer runtime.
 | `cymbal_46cm_medium` | plate | Fig. 9.3 anchor; main validation / fan-chart target; AmplitudeLayer **refuses** |
 | `gong_50cm_bronze` | plate | Scaled (no Table 9.1 row); no Sivian alias |
 | `tamtam_80cm_bronze` | plate | Scaled; no Sivian alias |
-| `bassdrum_82cm` | membrane | FR Table 18.5 measured-mode anchor (both heads); no Sivian alias |
+| `bassdrum_82cm` | membrane | FR Table 18.5 mode anchor; Sivian alias → `bass_drum_A_36x15` (size-mismatch `internal_default`) |
 | `bassdrum_32in` | membrane | Fitted `c` from 82 cm + own diameter; may accept mixed fill ≈ 0.59 |
 | `bassdrum_28in` | membrane | Fitted `c` from 82 cm + own diameter; currently refuses (fill ≈ 0.87) |
 
@@ -83,16 +83,19 @@ Uncheck instruments you do not need to speed up the run.
 
 | File | Contents |
 |---|---|
-| `density_profiles.csv` | Deterministic per-band profile (modes + `energy_w_*` + `fill_fraction`) |
+| `density_profiles.csv` | Deterministic per-band profile (modes + `energy_w_*` + `fill_fraction` + excitation notes) |
 | `density_profiles_mc.csv` | Same schema + `_p05`…`_p95` columns; use **`_p50`** to cite |
 | `density_profiles_mc.meta.json` | Seed, draw counts, perturbation metadata |
 | `density_profiles_mc_fan_*.png` | Median line + 50% / 90% bands (fan chart) |
+| `size_sweep_mc.csv` / `size_sweep.png` | MC composite index vs diameter (cite median + bands) |
 | `calibration_report.md` | Factor + spread if >=2 survivors; else **NO CALIBRATION ACHIEVED**; fill_fraction / exclusions |
-| `validation_report.md` | After recording validation — mapping table, PRIMARY / ff / skips |
+| `validation_report.md` | Auto-group: stick/mallet cohorts, optional baseline ρ deltas |
 
 ---
 
 ## Time phases (plates)
+
+**Cymbal class**
 
 | Phase | Window | What it represents |
 |---|---|---|
@@ -101,7 +104,18 @@ Uncheck instruments you do not need to speed up the run.
 | shimmer | 0.15–2 s | 3–5 kHz aftersound (“shimmer”) |
 | residue | 2–6 s | Late decay |
 
-Membranes use only **strike** / **decay**.
+**Tam-tam class** (`plate_class="tamtam"`; wind gongs share this)
+
+| Phase | Window | What it represents |
+|---|---|---|
+| strike | 0–50 ms | Impact transient |
+| bloom | 50 ms–1.5 s | Slow low→high cascade |
+| shimmer | 1.5–6 s | Established HF shimmer |
+| residue | 6–20 s | Long decay |
+
+Membranes use only **strike** / **decay**. When validation supplies
+`stroke` + `dynamic`, a Hertzian contact-time filter shapes `E0`
+(placeholders listed in `CHANGES.md` until source-read).
 
 ---
 
@@ -134,7 +148,8 @@ Membranes use only **strike** / **decay**.
 2. Linear regime only (not chaotic ff crashes)  
 3. Membrane in-vacuo bias: with FR Table 18.5 anchor, only **above** the
    measured range; without anchor, lowest modes overestimated  
-4. Equipartition at strike unless AmplitudeLayer **accepts** coverage (fill ≤ 0.60)  
+4. Stroke/dynamic ARE excitation parameters (contact-time filter); striking
+   position unmodelled; AmplitudeLayer still needs fill ≤ 0.60 to accept  
 5. Absolute 1931 levels weak above ~5 kHz (Meyer corrections = `literature_derived`)  
 6. Absolute levels = single specimens, not variance (variance → MC layer)  
 7. Cymbal model names → Sivian clash PAIR alias (`internal_default`)  

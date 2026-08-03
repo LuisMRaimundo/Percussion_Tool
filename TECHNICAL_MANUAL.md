@@ -43,8 +43,8 @@ calibration.py         Scale-commensurability bridge
 sample_metadata.py     Filename/folder parse for validation auto-group
 validate_against_recordings.py   Standalone recording check
 data/source_constants.csv        Digitized literature constants
-pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.3)
-tests/                           pytest (VAL1/VAL2/VAL3, MC, metadata, WAV)
+pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.4)
+tests/                           pytest (VAL1/VAL2/VAL3, excitation, MC, WAV)
 ```
 
 ### 2.1 Public API (stable)
@@ -53,10 +53,11 @@ tests/                           pytest (VAL1/VAL2/VAL3, MC, metadata, WAV)
 |---|---|---|
 | `PlateInstrument` / `MembraneInstrument` | `model` | Instrument dataclasses (membranes: optional `measured_modes`) |
 | `measured_modes_from_csv` / `make_bassdrum_catalogue` | `model` | FR Ch. 18 loader + 82 cm / scaled siblings |
-| `generate_profile(instr, …)` | `model` | Deterministic `DensityProfile` |
+| `generate_profile(instr, …, stroke=, dynamic=)` | `model` | Deterministic `DensityProfile` (+ optional excitation filter) |
+| `map_stroke_to_implement` / `load_contact_time_s` | `model` | Stroke→implement + CSV contact times |
 | `AmplitudeLayer` | `model` | Measured/mixed band weights + SPL (with fill refusal) |
 | `FILL_FRAC_*` / `ERB_MEASURED_ENERGY_FRAC` | `model` | Provenance & calibration thresholds (`internal_default`) |
-| `run_monte_carlo(instr, n_draws, seed)` | `uncertainty` | Distributional profiles |
+| `run_monte_carlo(instr, …, stroke=, dynamic=)` | `uncertainty` | Distributional profiles |
 | `run_pipeline(options, log)` | `nontunperc` | Full staged run |
 | `launch_gui()` | `nontunperc` | Desktop UI |
 | `parse_sample_path` / `resolve_model` | `sample_metadata` | Metadata-only validation grouping |
@@ -136,12 +137,28 @@ Fig. 9.5).
 1. Initial weights `e0`: equipartition over modes
    (`internal_default`), **or** AmplitudeLayer mapped weights when
    coverage is **accepted** (fill_fraction ≤ 0.60).
-2. Time evolution: `e(t) ∝ e0 · exp(−6.91·t / τ(f))` (60 dB convention).
-3. Plate buildup/shimmer: Gaussian boost around 4 kHz (Rossing Fig. 9.6
-   observations; `literature_derived`).
-4. Renormalize per phase so weights sum to 1.
+2. Optional Hertzian contact-time filter (when `stroke` and `dynamic`
+   both set): `E0(f) ← E0(f) / (1+(f/f_c)^4)`, `f_c = 1/(2 t_contact)`.
+   `t_contact` from `excitation_contact_time` CSV (source-read wins) else
+   placeholders (`internal_default`). Dynamic scale pp/mf/ff =
+   1.6/1.0/0.6 (`internal_default`; Hertz `t ∝ v^(-1/5)` is weaker —
+   factors are conservative).
+3. Time evolution: `e(t) ∝ e0 · exp(−6.91·t / τ(f))` (60 dB convention).
+4. Plate buildup/shimmer (cymbal) or shimmer only (tam-tam): Gaussian
+   boost around 4 kHz (Rossing Fig. 9.6), amplitude-gated by dynamic
+   (pp 0, mf 0.5, ff 1.0; `internal_default`). With stroke/dynamic
+   unset, gate = 1 (bit-identical to v0.3.3).
 
-### 4.5 Phase windows
+Weights are renormalized per phase so they sum to 1.
+
+### 4.5 Tam-tam temporal template
+
+`PLATE_PHASES_TAMTAM` (`literature_derived`): strike 0–50 ms, bloom
+50 ms–1.5 s (slow HF cascade), shimmer 1.5–6 s, residue 6–20 s.
+Selected when `PlateInstrument.plate_class == "tamtam"` (wind gongs
+included with a note).
+
+### 4.6 Phase windows (cymbal class)
 
 | Phase | t₀–t₁ |
 |---|---|
@@ -150,7 +167,7 @@ Fig. 9.5).
 | shimmer | 0.150–2.000 s |
 | residue | 2.000–6.000 s |
 
-### 4.6 Composite index
+### 4.7 Composite index
 
 Scalar summary (not the primary datum):
 
@@ -445,7 +462,7 @@ python -m pytest tests/ -q
 
 ## 14. Dependencies
 
-Declared in `pyproject.toml` (`nontunperc` 0.3.3, `requires-python >=3.10`)
+Declared in `pyproject.toml` (`nontunperc` 0.3.4, `requires-python >=3.10`)
 and mirrored in `requirements.txt`:
 
 Python ≥ 3.10 · numpy · scipy · matplotlib · pandas · soundfile  
@@ -460,7 +477,10 @@ Optional `[dev]`: pytest · GUI: tkinter (stdlib)
 3. **Membranes in vacuo** — with measured anchor, low modes are
    `primary_source` (FR 1998); in-vacuo bias applies only above the
    anchored range. Without anchor, air loading / two-head coupling omitted.  
-4. **Equipartition** — convention unless AmplitudeLayer **accepts** coverage (fill ≤ 0.60).  
+4. **Excitation** — stroke/dynamic ARE parameters via the contact-time
+   filter when both are set; striking position remains unmodelled.
+   Unset stroke/dynamic → v0.3.3 equipartition path. AmplitudeLayer
+   still requires fill ≤ 0.60 to accept coverage.  
 5. **Scale commensurability** — use calibration factor when >=2 bridge survivors exist; otherwise NO CALIBRATION ACHIEVED; spread = uncertainty; factor provisional under sparse digitization.
 6. **1931 HF chain** — above ~5 kHz prefer Meyer; `discrepancy_db` (`literature_derived`) records corrections.  
 7. **Specimen anchoring** — absolute levels = single specimens; variance via MC.  

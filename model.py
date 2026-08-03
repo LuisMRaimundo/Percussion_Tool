@@ -135,6 +135,9 @@ class PlateInstrument:
     # generate_profile call signature; unset behaviour is bit-identical.
     decay_tau_1k: float = 10.0
     decay_alpha: float = 0.84
+    # "cymbal" → PLATE_PHASES; "tamtam" → PLATE_PHASES_TAMTAM (wind gongs
+    # use the tam-tam template with a note).
+    plate_class: str = "cymbal"
 
     # -- asymptotic modal density [C]  (provenance: derived) -----------
     @property
@@ -492,10 +495,165 @@ PLATE_PHASES = {
     "shimmer": (0.150, 2.000),
     "residue": (2.000, 6.000),
 }
+# Tam-tam / wind-gong template (literature_derived from [R] tam-tam
+# chapter / [FR] Ch. 20): slow nonlinear HF bloom over ~1–2 s, then
+# long shimmer/decay out to tens of seconds — NOT the cymbal 0.15 s
+# shimmer onset.
+PLATE_PHASES_TAMTAM = {
+    # Immediate impact transient before the bloom develops.
+    "strike":  (0.000, 0.050),
+    # Low→high cascade develops over ~1–2 s after the stroke ([R]/[FR]).
+    "bloom":   (0.050, 1.500),
+    # Established broadband shimmer once HF energy has developed.
+    "shimmer": (1.500, 6.000),
+    # Long residue of large tam-tams (tens of seconds truncated at 20 s).
+    "residue": (6.000, 20.000),
+}
 MEMBRANE_PHASES = {
     "strike":  (0.000, 0.050),
     "decay":   (0.050, 1.000),
 }
+
+# Hertzian-impact contact-time placeholders (s) when CSV has no source row.
+# internal_default — NEVER overwrite a source-read CSV value with these.
+_CONTACT_TIME_PLACEHOLDERS_S: Dict[str, float] = {
+    "stick_tip": 0.4e-3,       # f_c ≈ 1.25 kHz
+    "stick_shoulder": 0.7e-3,
+    "yarn_mallet": 3.0e-3,     # f_c ≈ 167 Hz
+    "bass_drum_beater": 6.0e-3,
+}
+# Dynamic scaling of t_contact (internal_default). Hertz theory predicts
+# t ∝ v^(-1/5) (weak force dependence); these factors are deliberately
+# conservative / monotone: pp longer, ff shorter.
+_DYNAMIC_T_CONTACT_SCALE: Dict[str, float] = {
+    "pp": 1.6,
+    "mf": 1.0,
+    "ff": 0.6,
+}
+# Shimmer-boost amplitude gate (internal_default). Boost encodes the
+# nonlinear low→high cascade of [R] Fig. 9.6 / §9.4 (amplitude-driven).
+_DYNAMIC_SHIMMER_GATE: Dict[str, float] = {
+    "pp": 0.0,
+    "mf": 0.5,
+    "ff": 1.0,
+}
+
+# Parsed validation stroke → implement label used for contact-time lookup.
+_STROKE_TO_IMPLEMENT: Dict[str, str] = {
+    "mallet": "yarn_mallet",
+    "stick.normal": "stick_tip",
+    "stick.shoulder": "stick_shoulder",
+    "stick.bell": "stick_tip",
+    "stick_tip": "stick_tip",
+    "stick_shoulder": "stick_shoulder",
+    "yarn_mallet": "yarn_mallet",
+    "bass_drum_beater": "bass_drum_beater",
+}
+
+
+def map_stroke_to_implement(
+    stroke: Optional[str],
+    *,
+    plate_class: Optional[str] = None,
+    family: Optional[str] = None,
+) -> str:
+    """Map a parsed stroke label to an excitation implement key.
+
+    ``unmarked`` → ``yarn_mallet`` for tam-tams / wind gongs (orchestral
+    default) and ``stick_tip`` otherwise (``internal_default`` mapping).
+    """
+    if stroke is None:
+        if family == "membrane":
+            return "bass_drum_beater"
+        if plate_class in {"tamtam", "windgong"}:
+            return "yarn_mallet"
+        return "stick_tip"
+    key = stroke.strip().lower()
+    if key in _STROKE_TO_IMPLEMENT:
+        return _STROKE_TO_IMPLEMENT[key]
+    if key == "unmarked":
+        if plate_class in {"tamtam", "windgong"}:
+            return "yarn_mallet"
+        if family == "membrane":
+            return "bass_drum_beater"
+        return "stick_tip"
+    return "stick_tip"
+
+
+def load_contact_time_s(
+    implement: str,
+    csv_path: Optional[Path] = None,
+) -> Tuple[float, str, bool]:
+    """Return (t_contact_s, provenance, used_placeholder).
+
+    Source-read CSV values (``primary_source`` / ``literature_derived``,
+    ``needs_manual_reading != 1``) win over placeholders. Placeholders are
+    ``internal_default`` and flagged via the boolean.
+    """
+    path = (
+        Path(csv_path)
+        if csv_path is not None
+        else Path(__file__).resolve().parent / "data" / "source_constants.csv"
+    )
+    if path.is_file():
+        df = pd.read_csv(path)
+        sub = df[
+            (df["record_type"] == "excitation_contact_time")
+            & (df["instrument"] == implement)
+            & (df["needs_manual_reading"] != 1)
+            & df["value_si"].notna()
+        ]
+        # Prefer non-placeholder provenances when both exist.
+        if len(sub) > 0:
+            ranked = sub.copy()
+            ranked["_rank"] = ranked["provenance"].map(
+                lambda p: 0
+                if p in ("primary_source", "literature_derived")
+                else 1
+            )
+            ranked = ranked.sort_values("_rank")
+            row = ranked.iloc[0]
+            prov = str(row["provenance"])
+            t = float(row["value_si"])
+            used_ph = prov == "internal_default" or "placeholder" in str(
+                row.get("location", "")
+            ).lower()
+            return t, prov, used_ph
+    if implement not in _CONTACT_TIME_PLACEHOLDERS_S:
+        raise KeyError(f"unknown excitation implement: {implement}")
+    return (
+        float(_CONTACT_TIME_PLACEHOLDERS_S[implement]),
+        "internal_default",
+        True,
+    )
+
+
+def excitation_cutoff_hz(t_contact_s: float) -> float:
+    """Hertzian-impact low-pass cutoff: f_c ≈ 1 / (2 t_contact)."""
+    t = max(float(t_contact_s), 1e-9)
+    return 1.0 / (2.0 * t)
+
+
+def excitation_filter_gain(
+    f_hz: np.ndarray, f_c_hz: float
+) -> np.ndarray:
+    """Magnitude-squared low-pass: 1 / (1 + (f/f_c)^4) (internal_default)."""
+    f = np.asarray(f_hz, dtype=float)
+    fc = max(float(f_c_hz), 1e-9)
+    return 1.0 / (1.0 + (f / fc) ** 4)
+
+
+def apply_excitation_filter(
+    e0: np.ndarray,
+    centres_hz: np.ndarray,
+    t_contact_s: float,
+) -> np.ndarray:
+    """Filter then renormalize an initial energy vector."""
+    e = np.asarray(e0, dtype=float) * excitation_filter_gain(
+        centres_hz, excitation_cutoff_hz(t_contact_s)
+    )
+    s = float(e.sum())
+    return e / s if s > 0 else e
 
 
 def _band_mode_counts(instr, edges: np.ndarray) -> np.ndarray:
@@ -524,12 +682,18 @@ def _band_energy_weights(
     edges: np.ndarray,
     phases: Dict[str, Tuple[float, float]],
     e0: Optional[np.ndarray] = None,
+    shimmer_gate: float = 1.0,
 ) -> Dict[str, np.ndarray]:
     """
     Relative band energy per phase. Initial excitation defaults to
     equipartition over modes (internal_default). When ``e0`` is supplied
-    (AmplitudeLayer measured weights), that replaces equipartition only
-    for the initial vector; phase evolution is unchanged.
+    (AmplitudeLayer measured weights and/or contact-time filter), that
+    replaces equipartition only for the initial vector; phase evolution
+    is unchanged aside from dynamic-gated shimmer boost.
+
+    ``shimmer_gate`` scales the 3–5 kHz boost amplitude (1.0 = v0.3.3 full
+    boost; 0 = off). For tam-tams the boost applies in ``shimmer`` only,
+    not ``bloom``; for cymbals it applies in ``buildup`` and ``shimmer``.
     """
     centres = np.sqrt(edges[:-1] * edges[1:])
     counts = _band_mode_counts(instr, edges)
@@ -540,15 +704,24 @@ def _band_energy_weights(
         e0 = np.asarray(e0, dtype=float)
         s0 = e0.sum()
         e0 = e0 / s0 if s0 > 0 else e0
+    is_tamtam = (
+        isinstance(instr, PlateInstrument)
+        and getattr(instr, "plate_class", "cymbal") == "tamtam"
+    )
+    boost_phases = ("shimmer",) if is_tamtam else ("buildup", "shimmer")
     out: Dict[str, np.ndarray] = {}
     for phase, (t0, t1) in phases.items():
         tm = 0.5 * (t0 + t1)
         e = e0 * np.exp(-6.91 * tm / tau)  # 60 dB => ln(1e3)=6.91
-        if isinstance(instr, PlateInstrument) and phase in ("buildup",
-                                                            "shimmer"):
+        if (
+            isinstance(instr, PlateInstrument)
+            and phase in boost_phases
+            and shimmer_gate > 0.0
+        ):
             # 3-5 kHz "shimmer" emphasis [R, Fig. 9.6 obs. 3-4]
-            boost = 1.0 + 2.0 * np.exp(
-                -0.5 * ((np.log2(centres / 4000.0)) / 0.6) ** 2)
+            boost = 1.0 + (2.0 * shimmer_gate) * np.exp(
+                -0.5 * ((np.log2(centres / 4000.0)) / 0.6) ** 2
+            )
             e = e * boost
         s = e.sum()
         out[phase] = e / s if s > 0 else e
@@ -612,6 +785,9 @@ _INSTRUMENT_SOURCE_KEYS = {
     "cymbal_18in_medium": "cymbals_15in",
     "cymbal_46cm_medium": "cymbals_15in",
     "bassdrum_32in": "bass_drum_A_36x15",
+    # 82 cm FR modal anchor → Sivian 36 in (≈91 cm) bass drum A: size
+    # mismatch approximation (internal_default); see data/README.md.
+    "bassdrum_82cm": "bass_drum_A_36x15",
     "bassdrum_28in": "bass_drum_C_30x12",
     "trumpet": "trumpet",
     "clarinet": "clarinet",
@@ -841,6 +1017,11 @@ class DensityProfile:
     energy_provenance: str = "internal_default"
     ref_distance_m: Optional[float] = None
     fill_fraction: Optional[float] = None
+    stroke: Optional[str] = None
+    dynamic: Optional[str] = None
+    t_contact_s: Optional[float] = None
+    t_contact_provenance: Optional[str] = None
+    f_c_hz: Optional[float] = None
 
     def composite_index(self, phase: str) -> float:
         """
@@ -873,6 +1054,13 @@ class DensityProfile:
                 if self.ref_distance_m is not None else "",
                 "fill_fraction": self.fill_fraction
                 if self.fill_fraction is not None else "",
+                "stroke": self.stroke if self.stroke is not None else "",
+                "dynamic": self.dynamic if self.dynamic is not None else "",
+                "t_contact_s": self.t_contact_s
+                if self.t_contact_s is not None else "",
+                "t_contact_provenance": self.t_contact_provenance
+                if self.t_contact_provenance is not None else "",
+                "f_c_hz": self.f_c_hz if self.f_c_hz is not None else "",
                 "notes": note_str,
             }
             for ph, w in self.energy_weights.items():
@@ -888,19 +1076,47 @@ def generate_profile(
     f_lo: float = 20.0,
     f_hi: float = 16000.0,
     amplitude_layer: Optional[AmplitudeLayer] = None,
+    stroke: Optional[str] = None,
+    dynamic: Optional[str] = None,
+    csv_path: Optional[Path] = None,
 ) -> DensityProfile:
-    """Generate an ERB density profile; optionally apply AmplitudeLayer."""
+    """Generate an ERB density profile; optionally apply AmplitudeLayer.
+
+    When ``stroke`` and ``dynamic`` are **both** ``None``, behaviour is
+    bit-identical to v0.3.3 (equipartition / AmplitudeLayer path with full
+    shimmer boost). When both are set, a Hertzian contact-time low-pass
+    filters the initial energy and the 3–5 kHz shimmer boost is
+    dynamic-gated.
+    """
     edges = erb_band_edges(f_lo, f_hi)
     centres = np.sqrt(edges[:-1] * edges[1:])
     counts = _band_mode_counts(instr, edges)
     if isinstance(instr, PlateInstrument):
-        family, phases = "plate", PLATE_PHASES
-        notes = [
-            "flat-plate approximation: dome/curvature not modelled",
-            "linear modal regime: chaotic broadband regime at ff not modelled",
-        ]
+        family = "plate"
+        pclass = getattr(instr, "plate_class", "cymbal")
+        if pclass == "tamtam":
+            phases = PLATE_PHASES_TAMTAM
+            notes = [
+                "flat-plate approximation: dome/curvature not modelled",
+                "linear modal regime: chaotic broadband regime at ff not modelled",
+                "tam-tam temporal template (literature_derived): slow HF bloom "
+                "over ~1-2 s; HF emphasis in shimmer not bloom "
+                "([R] tam-tam / [FR] Ch. 20)",
+            ]
+            if "wind" in instr.name.lower() or "windgong" in instr.name.lower():
+                notes.append(
+                    "wind gong uses tam-tam phase template with note "
+                    "(distinct subtype; internal_default mapping)"
+                )
+        else:
+            phases = PLATE_PHASES
+            notes = [
+                "flat-plate approximation: dome/curvature not modelled",
+                "linear modal regime: chaotic broadband regime at ff not modelled",
+            ]
     else:
         family, phases = "membrane", MEMBRANE_PHASES
+        pclass = None
         if isinstance(instr, MembraneInstrument) and instr.has_measured_anchor():
             c_eff = instr.fitted_effective_c()
             n_anch = len(instr.measured_modes)  # type: ignore[arg-type]
@@ -928,6 +1144,34 @@ def generate_profile(
     ref_dist: Optional[float] = None
     fill_fraction: Optional[float] = None
     abs_spl: Dict[str, np.ndarray] = {}
+    t_contact: Optional[float] = None
+    t_prov: Optional[str] = None
+    f_c: Optional[float] = None
+    # Bit-identity path: both unset → full shimmer boost, no contact filter.
+    excitation_active = stroke is not None and dynamic is not None
+    shimmer_gate = 1.0
+    if excitation_active:
+        dyn = str(dynamic).lower()
+        shimmer_gate = float(_DYNAMIC_SHIMMER_GATE.get(dyn, 1.0))
+        implement = map_stroke_to_implement(
+            stroke, plate_class=pclass, family=family
+        )
+        t0, t_prov, used_ph = load_contact_time_s(implement, csv_path=csv_path)
+        scale = float(_DYNAMIC_T_CONTACT_SCALE.get(dyn, 1.0))
+        t_contact = t0 * scale
+        f_c = excitation_cutoff_hz(t_contact)
+        notes.append(
+            f"excitation filter active: stroke={stroke}, dynamic={dyn}, "
+            f"implement={implement}, t_contact={t_contact:.4e} s "
+            f"(base {t0:.4e} s x dynamic_scale={scale}), "
+            f"f_c={f_c:.1f} Hz, t_contact_provenance={t_prov}, "
+            f"shimmer_gate={shimmer_gate}"
+        )
+        if used_ph:
+            notes.append(
+                f"t_contact placeholder in use for {implement} "
+                f"(internal_default; awaiting source-read)"
+            )
 
     if amplitude_layer is not None:
         mapped = amplitude_layer.erb_weights_and_spl(instr.name, edges)
@@ -938,24 +1182,25 @@ def generate_profile(
                 f"fill_fraction={fill_fraction:.3f}; "
                 f"ref distance {ref_dist:.4f} m"
             )
-            # Phase-evolve absolute SPL with the same relative envelopes.
-            rel = _band_energy_weights(instr, edges, phases, e0=e0)
+            if excitation_active and t_contact is not None:
+                e0 = apply_excitation_filter(e0, centres, t_contact)
+            rel = _band_energy_weights(
+                instr, edges, phases, e0=e0, shimmer_gate=shimmer_gate
+            )
             for ph, w in rel.items():
-                # Scale absolute vector so strike matches spl0 energy sum.
-                # Use relative shape of phase weight with strike absolute
-                # peak as anchor (internal_default absolute evolution).
-                scale = np.nansum((10 ** (spl0 / 10.0))[np.isfinite(spl0)])
-                lin = w * (scale if scale > 0 else 1.0)
+                scale_abs = np.nansum(
+                    (10 ** (spl0 / 10.0))[np.isfinite(spl0)]
+                )
+                lin = w * (scale_abs if scale_abs > 0 else 1.0)
                 with np.errstate(divide="ignore"):
                     abs_spl[ph] = 10.0 * np.log10(np.maximum(lin, 1e-30))
-            weights = rel
             return DensityProfile(
-                instr.name, family, edges, centres, counts, weights, notes,
+                instr.name, family, edges, centres, counts, rel, notes,
                 absolute_spl_db=abs_spl, energy_provenance=provenance,
                 ref_distance_m=ref_dist, fill_fraction=fill_fraction,
+                stroke=stroke, dynamic=dynamic, t_contact_s=t_contact,
+                t_contact_provenance=t_prov, f_c_hz=f_c,
             )
-        # Coverage refused (e.g. mostly residual fill): keep equipartition
-        # but record why, including the fill fraction that triggered refusal.
         ff = amplitude_layer.fill_fraction_for(instr.name)
         if ff is not None and ff > FILL_FRAC_MIXED_MAX:
             fill_fraction = ff
@@ -965,9 +1210,19 @@ def generate_profile(
                 f"measurement); using equipartition (internal_default)"
             )
 
-    weights = _band_energy_weights(instr, edges, phases, e0=e0)
+    if e0 is None and excitation_active and t_contact is not None:
+        e0_eq = counts / max(counts.sum(), 1e-12)
+        e0 = apply_excitation_filter(e0_eq, centres, t_contact)
+    elif excitation_active and t_contact is not None and e0 is not None:
+        e0 = apply_excitation_filter(e0, centres, t_contact)
+
+    weights = _band_energy_weights(
+        instr, edges, phases, e0=e0, shimmer_gate=shimmer_gate
+    )
     return DensityProfile(
         instr.name, family, edges, centres, counts, weights, notes,
         absolute_spl_db=abs_spl, energy_provenance=provenance,
         ref_distance_m=ref_dist, fill_fraction=fill_fraction,
+        stroke=stroke, dynamic=dynamic, t_contact_s=t_contact,
+        t_contact_provenance=t_prov, f_c_hz=f_c,
     )

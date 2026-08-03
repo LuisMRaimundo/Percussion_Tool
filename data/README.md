@@ -78,11 +78,23 @@ Suspended-cymbal model entries (`cymbal_16in_thin`, `cymbal_18in_medium`,
 is an approximation labelled `internal_default` (see the
 `peak_power_whole` notes cell for `cymbals_15in`).
 
-`bassdrum_82cm` has **no** Sivian AmplitudeLayer alias (modes-only
-anchor). `bassdrum_32in` / `bassdrum_28in` keep their existing Sivian
-keys; they inherit the fitted effective wave speed from the 82 cm
-anchor (`f ∝ 1/a` at fixed `c`, `internal_default`) rather than copying
-measured frequencies.
+`bassdrum_82cm` aliases Sivian `bass_drum_A_36x15` for AmplitudeLayer
+(v0.3.4): the Sivian drum is 36 in (≈91 cm) vs the FR modal anchor at
+82 cm — size-mismatch approximation (`internal_default`). Expected
+fill ≈ 0.59 → `mixed_primary_and_fill`, same machinery as `bassdrum_32in`.
+`bassdrum_32in` / `bassdrum_28in` keep their keys; they inherit the
+fitted effective wave speed from the 82 cm modal anchor (`f ∝ 1/a` at
+fixed `c`, `internal_default`) rather than copying measured frequencies.
+
+### Excitation contact times (v0.3.4)
+
+`record_type=excitation_contact_time` rows store Hertzian-impact
+`t_contact_s` per implement (`stick_tip`, `stick_shoulder`, `yarn_mallet`,
+`bass_drum_beater`). FR 1998 §19.7 / Fig. 19.12 discuss contact and
+`f_max(v)` but do not print unambiguous absolute contact times for these
+implement classes — current rows are `internal_default` placeholders
+(see CHANGES.md). Source-read values must never be overwritten by
+placeholders.
 
 ### Provenance label correction (values unchanged)
 
