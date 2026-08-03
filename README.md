@@ -22,6 +22,10 @@ python nontunperc.py --cli     # headless (replaces demo.py)
 python -m pytest tests/ -q
 ```
 
+Work from the local project folder **`Percussion Tool`** (renamed from the
+misspelled `Percussion Tôol`). The `.bat` launchers set their own cwd, so
+double-clicking them is enough.
+
 `demo.py` remains as a thin compatibility wrapper around the headless pipeline.
 
 **Documentation**

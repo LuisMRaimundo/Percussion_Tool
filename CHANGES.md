@@ -29,6 +29,12 @@
   `requires-python >=3.10`) + `requirements.txt`; uncertainty docstring
   corrected to `[1/(1+frac), (1+frac)]`; `MATERIALS` mutation noted as
   not thread-safe.
+- **Docs sync:** README / TECHNICAL_MANUAL / QUICK_REFERENCE /
+  `data/README.md` / `cursor_prompt_idiophone_density.md` updated for
+  fill refusal, equal-density fill, measured-bands calibration, packaging,
+  and validation auto-group defaults.
+- **Local folder rename:** Desktop project directory corrected from
+  `Percussion Tôol` → `Percussion Tool` (misspelling; no code-path change).
 
 ## v0.3 — Monte Carlo uncertainty + recording validation
 

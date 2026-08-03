@@ -9,6 +9,7 @@ Version **0.3.1**.
 
 | Action | How |
 |---|---|
+| Project folder | `…\Desktop\Percussion Tool` (not `Tôol`) |
 | Install deps | `pip install -e ".[dev]"` or `pip install -r requirements.txt` |
 | Open the app | Double-click `run_nontunperc.bat` |
 | Headless full run | `run_nontunperc.bat --cli` or `python nontunperc.py --cli` |

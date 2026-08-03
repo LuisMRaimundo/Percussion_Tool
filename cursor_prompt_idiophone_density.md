@@ -1,10 +1,9 @@
-# Normative build specification (reconstructed)
+# Normative build specification (v0.3.1)
 
-> This file was **not present** in the shipping folder at audit time.
-> It is reconstructed from `README.md` (v0.1) and the working
-> `model.py` / `demo.py` so that Task-1 audits have a local normative
-> checklist. Do not treat reconstructed prose as a primary source for
-> physical constants.
+In-repo checklist aligned with current `README.md`, `model.py`, and
+`tests/`. Do not treat this file as a primary source for physical
+constants — those live in `data/source_constants.csv` with provenance
+labels.
 
 ## Provenance classes
 
@@ -31,6 +30,8 @@ is equal-density (∝ bandwidth), not equal energy per band.
 
 - **VAL1:** 46 cm cymbal ≈ 64 modes/kHz; >100 modes below 2 kHz
 - **VAL2:** anchored n=0 family reproduces Fig. 9.3 to ~0%
+- Recording validation: metadata-only auto-group; never fit parameters
+  from audio; no write-back to `primary_source` rows
 
 ## Export schema (minimum columns)
 
@@ -44,4 +45,7 @@ modes_per_band, energy_w_<phase>, energy_provenance, fill_fraction`
 - Plate modes/ERB grow toward high frequency
 - Membrane modal density rises with f
 - Phase weights normalize to 1
+- High fill_fraction refuses AmplitudeLayer (`internal_default`)
+- Equal-density residual: narrow uncovered band gets less energy than wide
+- Calibration excludes instruments with fewer than 2 measured bands
 - VAL1 / VAL2 as above

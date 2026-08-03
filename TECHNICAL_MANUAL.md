@@ -326,8 +326,8 @@ labelled nonlinear-regime probe.
 ### 9.4 Hard rule
 
 Measured values **never** write back into `data/source_constants.csv` or
-any `primary_source` field. Findings go to `validation_report.md` /
-`CHANGES.md` only.
+any `primary_source` field. Findings go to `validation_report.md` (and
+figures) only.
 
 ---
 
@@ -391,7 +391,11 @@ python nontunperc.py --cli --no-plots --no-calibration
 python nontunperc.py --cli --mc-draws 500 --seed 20260803 --out <dir>
 
 python validate_against_recordings.py --gui
-python validate_against_recordings.py --cli --auto-group --wav-dir <dir>
+# CLI defaults to metadata auto-group; --auto-group is optional
+python validate_against_recordings.py --cli --wav-dir <dir>
+python validate_against_recordings.py --cli --no-auto-group --wav-dir <dir> \
+    --instrument cymbal_46cm_medium --out <report_dir>
+# or: run_validate.bat --cli "D:\Samples"
 
 python -m pytest tests/ -q
 ```
