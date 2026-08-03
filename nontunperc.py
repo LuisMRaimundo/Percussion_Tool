@@ -36,7 +36,7 @@ from model import (
     PlateInstrument,
     generate_profile,
 )
-from calibration import write_calibration_report
+from calibration import format_calibration_cli_line, write_calibration_report
 from uncertainty import (
     DEFAULT_SEED,
     export_mc_csv,
@@ -250,11 +250,7 @@ def run_pipeline(
     if opt.run_calibration:
         report = out / "calibration_report.md"
         factor, spread = write_calibration_report(report, layer)
-        _log(
-            f"[CAL ] conversion factor = {factor:.6g}  "
-            f"(spread / uncertainty = {spread:.6g})",
-            log,
-        )
+        _log(format_calibration_cli_line(factor, spread), log)
         _log(f"[OUT ] {report.name}", log)
         summary["calibration_factor"] = factor
         summary["calibration_spread"] = spread

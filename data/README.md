@@ -64,3 +64,11 @@ The four `meyer_hf_discrepancy` rows were re-labelled from
 `primary_source` to `literature_derived` because their notes already
 state the offsets are conservative estimates, not figure readings. **No
 numeric values were changed.**
+
+### Calibration bridge (v0.3.2)
+
+Until the `needs_manual_reading` histogram cells above are completed,
+the scale-commensurability bridge typically has fewer than two surviving
+instruments and reports **NO CALIBRATION ACHIEVED** (factor undefined).
+The model side of the bridge is theory-only (partials); it does not reuse
+AmplitudeLayer measured weights.

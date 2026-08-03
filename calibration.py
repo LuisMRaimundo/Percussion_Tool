@@ -6,20 +6,26 @@ Scale-commensurability bridge between the model's internal composite
 density indices and absolute Sivian/Meyer band data.
 
 Bridge instruments are treated as simple quasi-harmonic fixtures
-(partials at n·f0 with band energies from the digitized spectra). This
-is not a pitched-instrument model; it exists only to estimate a single
-conversion factor and its spread across instruments.
+(partials at n·f0). This is not a pitched-instrument model; it exists
+only to estimate a single conversion factor and its spread.
 
-Empirical indices use **measured historical bands only** (residual fill
-excluded) so the conversion factor does not trend toward the uniform
+**Model side** (theory only, ``internal_default``): partial histogram with
+equal-energy-per-partial weighting — never AmplitudeLayer measured weights.
+
+**Empirical side**: Shannon-style index on measured historical bands only
+(residual fill excluded) so the factor does not trend toward the uniform
 maximum merely because of sparse digitization.
+
+If fewer than two instruments survive exclusion, the factor is undefined
+(``nan``, ``nan``) until Sivian ``needs_manual_reading`` histograms are
+completed.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -33,6 +39,11 @@ from model import (
 
 ROOT = Path(__file__).resolve().parent
 
+NO_CALIBRATION_MSG = (
+    "NO CALIBRATION ACHIEVED - factor undefined until the "
+    "needs_manual_reading Sivian histograms are completed"
+)
+
 # Bridge fixtures: (name, f0_Hz, n_partials). internal_default f0 choices
 # for typical orchestral tessitura of each instrument.
 BRIDGE_INSTRUMENTS: List[Tuple[str, float, int]] = [
@@ -41,6 +52,9 @@ BRIDGE_INSTRUMENTS: List[Tuple[str, float, int]] = [
     ("flute", 349.0, 10),      # F4 vicinity
     ("bass_viol", 49.0, 16),   # string-family stand-in (violin spectrum absent)
 ]
+
+# Minimum surviving bridge members for a defined conversion factor.
+_MIN_BRIDGE_SURVIVORS = 2
 
 
 @dataclass
@@ -81,32 +95,43 @@ def measured_erb_mask(
     return frac > frac_threshold
 
 
-def _quasi_harmonic_profile(
-    name: str,
-    f0: float,
-    n_partials: int,
-    layer: AmplitudeLayer,
+def _composite_from_weights(
+    weights: np.ndarray, modes_per_band: np.ndarray
+) -> float:
+    """Same aggregator as ``DensityProfile.composite_index``."""
+    w = np.asarray(weights, dtype=float)
+    s = float(w.sum())
+    if s <= 0:
+        return float("nan")
+    w = w / s
+    nz = w > 0
+    H = -np.sum(w[nz] * np.log(w[nz]))
+    mean_occ = float(np.sum(w * modes_per_band))
+    return float(np.exp(H) * max(mean_occ, 1e-12)) ** 0.5
+
+
+def theory_bridge_model_index(f0: float, n_partials: int) -> float:
+    """Theory-side bridge index: partials + equal energy per partial.
+
+    Never uses AmplitudeLayer / measured band weights
+    (``internal_default`` construction).
+    """
+    edges = erb_band_edges(20.0, 16000.0)
+    partials = f0 * np.arange(1, n_partials + 1, dtype=float)
+    modes = np.histogram(partials, bins=edges)[0].astype(float)
+    # Equal energy per partial ⇒ band weight ∝ partial count in band.
+    return _composite_from_weights(modes, modes)
+
+
+def theory_bridge_profile(
+    name: str, f0: float, n_partials: int
 ) -> DensityProfile:
-    """Build a bridge DensityProfile from partials + measured band powers."""
+    """DensityProfile for documentation / plots: theory weights only."""
     edges = erb_band_edges(20.0, 16000.0)
     centres = np.sqrt(edges[:-1] * edges[1:])
     partials = f0 * np.arange(1, n_partials + 1, dtype=float)
     modes = np.histogram(partials, bins=edges)[0].astype(float)
-
-    mapped = layer.erb_weights_and_spl(name, edges)
-    if mapped is None:
-        # Fall back: put equal energy on partial-occupied bands.
-        e0 = modes / max(modes.sum(), 1e-12)
-        provenance = "internal_default"
-        ref_dist = 0.9144
-        fill_fraction = layer.fill_fraction_for(name)
-        abs_spl: Dict[str, np.ndarray] = {}
-    else:
-        e0, spl0, ref_dist, provenance, fill_fraction = mapped
-        abs_spl = {"strike": spl0}
-
-    # Single "strike" phase for the bridge fixture.
-    w = e0 / e0.sum() if e0.sum() > 0 else e0
+    w = modes / max(modes.sum(), 1e-12)
     return DensityProfile(
         instrument=name,
         family="bridge_quasi_harmonic",
@@ -115,14 +140,14 @@ def _quasi_harmonic_profile(
         modes_per_band=modes,
         energy_weights={"strike": w},
         notes=[
-            f"bridge fixture: partials n*f0, f0={f0} Hz, N={n_partials}",
-            f"energy provenance: {provenance}",
-            f"fill_fraction: {fill_fraction}",
+            f"bridge fixture (theory): partials n*f0, f0={f0} Hz, N={n_partials}",
+            "equal-energy-per-partial weighting (internal_default)",
+            "model side does not reuse measured AmplitudeLayer weights",
         ],
-        absolute_spl_db=abs_spl,
-        energy_provenance=provenance,
-        ref_distance_m=ref_dist,
-        fill_fraction=fill_fraction,
+        absolute_spl_db={},
+        energy_provenance="internal_default",
+        ref_distance_m=None,
+        fill_fraction=None,
     )
 
 
@@ -155,17 +180,20 @@ def _empirical_index_measured_only(
     if s <= 0:
         return float("nan"), float(fill_frac), n_meas
     w = erb_e / s
-    nz = w > 0
-    H = -np.sum(w[nz] * np.log(w[nz]))
-    mean_occ = float(np.sum(w * (erb_e > 0)))
-    idx = float(np.exp(H) * max(mean_occ, 1e-12)) ** 0.5
+    # Occupation proxy on measured ERB support only.
+    modes_proxy = (erb_e > 0).astype(float)
+    idx = _composite_from_weights(w, modes_proxy)
     return idx, float(fill_frac), n_meas
 
 
 def run_calibration(
     layer: Optional[AmplitudeLayer] = None,
 ) -> Tuple[float, float, List[BridgeResult], List[BridgeExclusion]]:
-    """Return (factor_mean, factor_spread_stdev, results, exclusions)."""
+    """Return (factor_mean, factor_spread_stdev, results, exclusions).
+
+    Factor is ``(nan, nan)`` when fewer than ``_MIN_BRIDGE_SURVIVORS``
+    instruments survive exclusion.
+    """
     layer = layer or AmplitudeLayer.default(ROOT)
     results: List[BridgeResult] = []
     exclusions: List[BridgeExclusion] = []
@@ -187,15 +215,13 @@ def run_calibration(
             exclusions.append(
                 BridgeExclusion(
                     name,
-                    "AmplitudeLayer coverage refused "
-                    f"(fill_fraction={ff})",
+                    "AmplitudeLayer coverage refused",
                     fill_fraction=ff,
                     n_measured_bands=n_meas,
                 )
             )
             continue
-        prof = _quasi_harmonic_profile(name, f0, npart, layer)
-        model_idx = prof.composite_index("strike")
+        model_idx = theory_bridge_model_index(f0, npart)
         emp_idx, fill_frac, n_meas = _empirical_index_measured_only(name, layer)
         if not np.isfinite(model_idx) or not np.isfinite(emp_idx) or model_idx <= 0:
             exclusions.append(
@@ -217,12 +243,10 @@ def run_calibration(
                 n_measured_bands=n_meas,
             )
         )
-    if not results:
+    if len(results) < _MIN_BRIDGE_SURVIVORS:
         return float("nan"), float("nan"), results, exclusions
     factors = np.array([r.factor for r in results], dtype=float)
-    spread = (
-        float(np.std(factors, ddof=1)) if len(factors) > 1 else 0.0
-    )
+    spread = float(np.std(factors, ddof=1))
     return float(np.mean(factors)), spread, results, exclusions
 
 
@@ -233,45 +257,78 @@ def write_calibration_report(
     """Write ``calibration_report.md`` and return (mean, spread)."""
     path = path or ROOT / "calibration_report.md"
     mean, spread, results, exclusions = run_calibration(layer)
+    achieved = np.isfinite(mean) and len(results) >= _MIN_BRIDGE_SURVIVORS
+
     lines = [
         "# Calibration report — scale commensurability bridge",
         "",
         "Bridge instruments are quasi-harmonic fixtures only (partials at",
-        "`n·f0` with band energies from Sivian/Meyer digitized spectra).",
-        "They are **not** a pitched-instrument model.",
+        "`n·f0`). They are **not** a pitched-instrument model.",
         "",
-        "Empirical indices are computed on **measured bands only** (ERB",
-        "bands whose remapped energy is >50% from digitized",
-        "`peak_power_band` rows; threshold `internal_default`). Residual",
-        "equal-density fill is excluded from the bridge index.",
+        "**Model index** — theory only: partial histogram with",
+        "equal-energy-per-partial weighting (`internal_default`). Does",
+        "**not** reuse AmplitudeLayer measured band weights.",
         "",
-        f"**Conversion factor** (empirical index / model index): "
-        f"**{mean:.6g}**",
+        "**Empirical index** — measured bands only (ERB bands whose",
+        "remapped energy is >50% from digitized `peak_power_band` rows;",
+        "threshold `internal_default`). Residual equal-density fill is",
+        "excluded.",
         "",
-        f"**Spread across bridge instruments** (sample stdev): "
-        f"**{spread:.6g}**",
-        "",
-        "> The spread IS the uncertainty to be attached to any",
-        "> cross-domain ratio claim that converts the model's internal",
-        "> composite index into the empirical absolute scale (or the",
-        "> reverse).",
-        "",
-        "> **Sparse-coverage caveat:** this factor is anchored on sparse",
-        "> band coverage until the `needs_manual_reading` histogram cells",
-        "> listed in `data/README.md` are completed. Until then, treat the",
-        "> conversion factor as provisional.",
-        "",
-        "## Per-instrument bridge results",
-        "",
-        "| instrument | fill_fraction | n_measured | model index | "
-        "empirical index (measured bands) | factor |",
-        "|---|---:|---:|---:|---:|---:|",
     ]
+    if achieved:
+        lines.extend(
+            [
+                f"**Conversion factor** (empirical index / model index): "
+                f"**{mean:.6g}**",
+                "",
+                f"**Spread across bridge instruments** (sample stdev): "
+                f"**{spread:.6g}**",
+                "",
+                "> The spread IS the uncertainty to be attached to any",
+                "> cross-domain ratio claim that converts the model's",
+                "> internal composite index into the empirical absolute",
+                "> scale (or the reverse).",
+                "",
+                "> **Sparse-coverage caveat:** this factor is anchored on",
+                "> sparse band coverage until the `needs_manual_reading`",
+                "> histogram cells listed in `data/README.md` are",
+                "> completed. Until then, treat the conversion factor as",
+                "> provisional.",
+                "",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"**{NO_CALIBRATION_MSG}**",
+                "",
+                f"Surviving bridge instruments: **{len(results)}** "
+                f"(need >= {_MIN_BRIDGE_SURVIVORS}).",
+                "",
+                "> Complete the `needs_manual_reading` Sivian histogram",
+                "> cells in `data/README.md` before a conversion factor",
+                "> can be defined.",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Per-instrument bridge results",
+            "",
+            "| instrument | fill_fraction | n_measured | model index "
+            "(theory) | empirical index (measured bands) | factor |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+    )
     for r in results:
+        factor_cell = (
+            f"{r.factor:.6g}" if achieved else "—"
+        )
         lines.append(
             f"| {r.name} | {r.fill_fraction:.3f} | {r.n_measured_bands} | "
             f"{r.model_index:.6g} | {r.empirical_index:.6g} "
-            f"| {r.factor:.6g} |"
+            f"| {factor_cell} |"
         )
     if not results:
         lines.append("| _(none)_ | — | — | — | — | — |")
@@ -317,6 +374,16 @@ def write_calibration_report(
     return mean, spread
 
 
+def format_calibration_cli_line(mean: float, spread: float) -> str:
+    """One-line CLI / pipeline status for the calibration stage."""
+    if not np.isfinite(mean):
+        return f"[CAL ] {NO_CALIBRATION_MSG}"
+    return (
+        f"[CAL ] conversion factor = {mean:.6g}  "
+        f"(spread / uncertainty = {spread:.6g})"
+    )
+
+
 if __name__ == "__main__":
     m, s = write_calibration_report()
-    print(f"[CAL] factor={m:.6g}  spread={s:.6g}")
+    print(format_calibration_cli_line(m, s))

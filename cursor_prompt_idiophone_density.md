@@ -1,4 +1,4 @@
-# Normative build specification (v0.3.1)
+# Normative build specification (v0.3.2)
 
 In-repo checklist aligned with current `README.md`, `model.py`, and
 `tests/`. Do not treat this file as a primary source for physical
@@ -32,6 +32,9 @@ is equal-density (∝ bandwidth), not equal energy per band.
 - **VAL2:** anchored n=0 family reproduces Fig. 9.3 to ~0%
 - Recording validation: metadata-only auto-group; never fit parameters
   from audio; no write-back to `primary_source` rows
+- Calibration bridge: model index = theory partials + equal energy per
+  partial (never measured weights); empirical = measured bands only;
+  <2 survivors → `NO CALIBRATION ACHIEVED` (factor undefined)
 
 ## Export schema (minimum columns)
 

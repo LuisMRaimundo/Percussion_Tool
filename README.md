@@ -1,4 +1,4 @@
-# NonTunPerc — non-tuned percussion density model (v0.3.1)
+# NonTunPerc — non-tuned percussion density model (v0.3.2)
 
 A bibliography-based, parametric model that generates **ERB-band spectral
 density profiles** for unpitched percussion from physical input parameters
@@ -129,15 +129,23 @@ instruments without accepted coverage (e.g. gong, tam-tam, refused cymbals).
 
 `calibration.py` runs quasi-harmonic bridge fixtures for trumpet,
 clarinet, flute, and bass viol (string-family stand-in; violin full-band
-spectrum is absent from Sivian 1931). Empirical indices use **measured
-bands only** (ERB bands with >50% energy from digitized rows; fill
-excluded). Instruments with fewer than 2 measured bands, or refused
-AmplitudeLayer coverage, are listed under exclusions in
-`calibration_report.md`.
+spectrum is absent from Sivian 1931).
 
-**The spread IS the uncertainty to be attached to any cross-domain ratio
-claim.** The factor is provisional until `needs_manual_reading` histogram
-cells in `data/README.md` are completed.
+- **Model index** — theory only: partial histogram with
+  equal-energy-per-partial weighting (`internal_default`). Does **not**
+  reuse AmplitudeLayer measured weights.
+- **Empirical index** — measured bands only (ERB bands with >50% energy
+  from digitized rows; fill excluded).
+
+Instruments with fewer than 2 measured bands, or refused AmplitudeLayer
+coverage, are listed under exclusions. If fewer than **two** instruments
+survive, the factor is undefined: report and CLI print
+`NO CALIBRATION ACHIEVED - factor undefined until the
+needs_manual_reading Sivian histograms are completed`.
+
+When ≥2 survivors exist, **the spread IS the uncertainty** for any
+cross-domain ratio claim. The factor remains provisional until
+`needs_manual_reading` histogram cells in `data/README.md` are completed.
 
 ## 5. Monte Carlo uncertainty (`uncertainty.py`)
 

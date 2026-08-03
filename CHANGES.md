@@ -1,5 +1,22 @@
 # CHANGES
 
+## v0.3.2 — Calibration bridge: independent theory side + no-factor verdict
+
+- If fewer than 2 bridge instruments survive exclusion, the conversion
+  factor is **undefined** (`nan`, `nan`); report and CLI print
+  `NO CALIBRATION ACHIEVED - factor undefined until the
+  needs_manual_reading Sivian histograms are completed`.
+- Model-side bridge index no longer reuses AmplitudeLayer measured
+  weights (structural self-comparison removed). It is built from theory
+  only: partial histogram + equal-energy-per-partial weighting
+  (`internal_default`).
+- Empirical side remains measured-bands-only (unchanged).
+- Exclusion lines no longer embed `fill_fraction` twice (reason + trailer).
+- Package version → `0.3.2`.
+- Docs updated (README, TECHNICAL_MANUAL, QUICK_REFERENCE, data/README,
+  cursor_prompt) for the independent theory-side index and no-calibration
+  verdict.
+
 ## v0.3.1 — Honest AmplitudeLayer labelling, density fill, calibration, packaging
 
 - **Fix 1 — provenance / refusal:** `historical_band_powers` now returns an

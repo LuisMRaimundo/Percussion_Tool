@@ -42,7 +42,7 @@ calibration.py         Scale-commensurability bridge
 sample_metadata.py     Filename/folder parse for validation auto-group
 validate_against_recordings.py   Standalone recording check
 data/source_constants.csv        Digitized literature constants
-pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.1)
+pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.2)
 tests/                           pytest (VAL1/VAL2, MC, metadata, WAV)
 ```
 
@@ -268,15 +268,24 @@ Default seed: `20260803`.
 trumpet, clarinet, flute, and bass viol (string stand-in; violin
 full-band spectrum absent from Sivian 1931).
 
-Empirical indices use **measured ERB bands only**: an ERB band counts as
+**Model index (theory only):** partial histogram with
+equal-energy-per-partial weighting (`internal_default`). Must **not**
+reuse AmplitudeLayer measured band weights (avoids structural
+self-comparison).
+
+**Empirical index:** measured ERB bands only — an ERB band counts as
 measured if >50% of its remapped energy came from `is_measured`
 historical bands (`ERB_MEASURED_ENERGY_FRAC`, `internal_default`).
 Instruments with fewer than 2 digitized measured bands, or refused
 AmplitudeLayer coverage, are **excluded** and listed in
-`calibration_report.md` with fill_fraction and n_measured.
+`calibration_report.md` with fill_fraction and n_measured (once each).
 
-**The sample standard deviation of the conversion factor across retained
-bridge instruments IS the uncertainty** for any cross-domain ratio claim.
+If fewer than **two** survivors remain, return `(nan, nan)` and write /
+print `NO CALIBRATION ACHIEVED - factor undefined until the
+needs_manual_reading Sivian histograms are completed`.
+
+When ≥2 survivors exist, **the sample standard deviation of the
+conversion factor IS the uncertainty** for any cross-domain ratio claim.
 Treat the factor as provisional until `needs_manual_reading` cells are
 completed (`data/README.md`).
 
@@ -404,7 +413,7 @@ python -m pytest tests/ -q
 
 ## 14. Dependencies
 
-Declared in `pyproject.toml` (`nontunperc` 0.3.1, `requires-python >=3.10`)
+Declared in `pyproject.toml` (`nontunperc` 0.3.2, `requires-python >=3.10`)
 and mirrored in `requirements.txt`:
 
 Python ≥ 3.10 · numpy · scipy · matplotlib · pandas · soundfile  
@@ -418,7 +427,7 @@ Optional `[dev]`: pytest · GUI: tkinter (stdlib)
 2. **Linear regime** — chaotic ff broadband outside scope.  
 3. **Membranes in vacuo** — air loading / two-head coupling omitted.  
 4. **Equipartition** — convention unless AmplitudeLayer **accepts** coverage (fill ≤ 0.60).  
-5. **Scale commensurability** — use calibration factor; spread = uncertainty; factor provisional under sparse digitization.  
+5. **Scale commensurability** — use calibration factor when >=2 bridge survivors exist; otherwise NO CALIBRATION ACHIEVED; spread = uncertainty; factor provisional under sparse digitization.
 6. **1931 HF chain** — above ~5 kHz prefer Meyer; `discrepancy_db` (`literature_derived`) records corrections.  
 7. **Specimen anchoring** — absolute levels = single specimens; variance via MC.  
 8. **Clash-pair alias** — suspended-cymbal model names → Sivian 15-in. clash PAIR (`internal_default`).

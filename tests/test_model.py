@@ -161,13 +161,123 @@ def test_energy_preserving_remap_conserves() -> None:
 def test_calibration_runs() -> None:
     mean, spread, results, exclusions = run_calibration(AmplitudeLayer.default(ROOT))
     assert len(results) + len(exclusions) >= 3
-    # Sparse digitization may leave few bridge members; mean finite if any.
-    if results:
+    # Factor defined only with ≥2 survivors; otherwise nan.
+    if len(results) >= 2:
         assert np.isfinite(mean)
         assert np.isfinite(spread)
         assert spread >= 0.0
         for r in results:
             assert r.n_measured_bands >= 2
+            # Theory vs measured sides must be independent constructions.
+            assert r.model_index != pytest.approx(r.empirical_index, rel=0, abs=0)
+    else:
+        assert not np.isfinite(mean)
+        assert not np.isfinite(spread)
+
+
+def test_calibration_no_factor_with_single_survivor() -> None:
+    """Fewer than 2 survivors → NO CALIBRATION ACHIEVED (nan, nan)."""
+    from calibration import NO_CALIBRATION_MSG, format_calibration_cli_line
+
+    mean, spread, results, exclusions = run_calibration(AmplitudeLayer.default(ROOT))
+    # Shipping Sivian digitization currently leaves < 2 survivors.
+    assert len(results) < 2
+    assert not np.isfinite(mean) and not np.isfinite(spread)
+    cli = format_calibration_cli_line(mean, spread)
+    assert "NO CALIBRATION ACHIEVED" in cli
+    assert NO_CALIBRATION_MSG in cli
+
+
+def test_calibration_theory_index_independent_partial_overlap(tmp_path: Path) -> None:
+    """Partials and measured bands only partially overlap → indices differ."""
+    import calibration as cal
+    from model import _INSTRUMENT_SOURCE_KEYS
+
+    src = ROOT / "data" / "source_constants.csv"
+    df = pd.read_csv(src)
+    edge_rows = df[df["record_type"] == "sivian_band_edge"].copy()
+    # Two measured mid bands; whole = covered ⇒ fill_fraction 0 → coverage ok.
+    # f0=80 Hz puts many partials outside 250–700 Hz.
+    synth = pd.DataFrame(
+        [
+            {
+                "record_type": "sivian_meta",
+                "instrument": "synth_overlap",
+                "specimen": "",
+                "source": "test",
+                "location": "test",
+                "provenance": "internal_default",
+                "parameter": "peak_power_whole",
+                "value": 2.0,
+                "units_printed": "W",
+                "units_si": "W",
+                "value_si": 2.0,
+                "band_lo_hz": "",
+                "band_hi_hz": "",
+                "measurement_year": 1931.0,
+                "ref_distance_m": 0.9144,
+                "discrepancy_db": "",
+                "needs_manual_reading": 0,
+                "notes": "synthetic partial-overlap",
+            },
+            {
+                "record_type": "sivian_meta",
+                "instrument": "synth_overlap",
+                "specimen": "",
+                "source": "test",
+                "location": "test",
+                "provenance": "internal_default",
+                "parameter": "peak_power_band",
+                "value": 1.2,
+                "units_printed": "W",
+                "units_si": "W",
+                "value_si": 1.2,
+                "band_lo_hz": 250.0,
+                "band_hi_hz": 500.0,
+                "measurement_year": 1931.0,
+                "ref_distance_m": 0.9144,
+                "discrepancy_db": "",
+                "needs_manual_reading": 0,
+                "notes": "",
+            },
+            {
+                "record_type": "sivian_meta",
+                "instrument": "synth_overlap",
+                "specimen": "",
+                "source": "test",
+                "location": "test",
+                "provenance": "internal_default",
+                "parameter": "peak_power_band",
+                "value": 0.8,
+                "units_printed": "W",
+                "units_si": "W",
+                "value_si": 0.8,
+                "band_lo_hz": 500.0,
+                "band_hi_hz": 700.0,
+                "measurement_year": 1931.0,
+                "ref_distance_m": 0.9144,
+                "discrepancy_db": "",
+                "needs_manual_reading": 0,
+                "notes": "",
+            },
+        ]
+    )
+    out_csv = tmp_path / "source_constants.csv"
+    pd.concat([edge_rows, synth], ignore_index=True).to_csv(out_csv, index=False)
+    layer = AmplitudeLayer(out_csv)
+    _INSTRUMENT_SOURCE_KEYS["synth_overlap"] = "synth_overlap"
+    try:
+        f0, npart = 80.0, 16
+        model_idx = cal.theory_bridge_model_index(f0, npart)
+        emp_idx, ff, n_meas = cal._empirical_index_measured_only(
+            "synth_overlap", layer
+        )
+        assert n_meas == 2
+        assert ff == pytest.approx(0.0)
+        assert np.isfinite(model_idx) and np.isfinite(emp_idx)
+        assert model_idx != pytest.approx(emp_idx, rel=1e-12, abs=1e-12)
+    finally:
+        _INSTRUMENT_SOURCE_KEYS.pop("synth_overlap", None)
 
 
 def test_calibration_excludes_single_measured_band(tmp_path: Path) -> None:
@@ -255,11 +365,20 @@ def test_calibration_report_written(tmp_path: Path) -> None:
     out = tmp_path / "calibration_report.md"
     mean, spread = write_calibration_report(out, AmplitudeLayer.default(ROOT))
     text = out.read_text(encoding="utf-8")
-    assert "Conversion factor" in text
-    assert "spread IS the uncertainty" in text
-    assert "Sparse-coverage caveat" in text
     assert "fill_fraction" in text
     assert "Excluded from bridge" in text
+    assert "equal-energy-per-partial" in text or "theory only" in text.lower()
+    if np.isfinite(mean):
+        assert "Conversion factor" in text
+        assert "spread IS the uncertainty" in text
+    else:
+        assert "NO CALIBRATION ACHIEVED" in text
+        # Exclusion lines must not duplicate fill_fraction in the reason.
+        for line in text.splitlines():
+            if line.startswith("- **") and "fill_fraction=" in line:
+                # reason body before the trailing "(fill_fraction=...)"
+                body = line.split("(fill_fraction=")[0]
+                assert "fill_fraction=" not in body
 
 
 def test_meyer_hf_provenance_is_literature_derived() -> None:

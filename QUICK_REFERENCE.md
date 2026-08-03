@@ -1,7 +1,7 @@
 # NonTunPerc — Quick reference
 
 One-page guide to the GUI options, outputs, and everyday use.
-Version **0.3.1**.
+Version **0.3.2**.
 
 ---
 
@@ -32,7 +32,7 @@ From physical parameters (size, thickness/tension, material), NonTunPerc predict
 | **VAL1 / VAL2 checks** | Sanity checks on the 46 cm cymbal: modal density ≈ 64 modes/kHz (VAL1); Chladni fit reproduces Rossing Fig. 9.3 (VAL2). |
 | **Density profiles (CSV)** | Writes `density_profiles.csv`: one row per instrument × ERB band with mode counts, relative energy weights, `energy_provenance`, `fill_fraction`. |
 | **Plots (PNG)** | Writes `density_profiles.png` (modes + phase energies) and `size_sweep.png` (index vs cymbal diameter). |
-| **Calibration bridge** | Measured-bands-only scale bridge → `calibration_report.md` (factor + spread; sparse-coverage caveat). |
+| **Calibration bridge** | Theory-side partials vs measured-bands-only empirical index → `calibration_report.md`. Needs >=2 survivors; otherwise **NO CALIBRATION ACHIEVED**. |
 | **Monte Carlo uncertainty** | Re-runs the model with specimen/parameter noise; exports medians and intervals (`density_profiles_mc.csv` + fan chart). |
 | **Use AmplitudeLayer** | When on, instruments with Sivian–Meyer coverage **and** fill_fraction ≤ 0.60 use measured/mixed weights; mostly-filled vectors (e.g. cymbals ≈ 0.90) refuse and keep equipartition. Gong/tam-tam stay equipartition. |
 
@@ -86,7 +86,7 @@ Uncheck instruments you do not need to speed up the run.
 | `density_profiles_mc.csv` | Same schema + `_p05`…`_p95` columns; use **`_p50`** to cite |
 | `density_profiles_mc.meta.json` | Seed, draw counts, perturbation metadata |
 | `density_profiles_mc_fan_*.png` | Median line + 50% / 90% bands (fan chart) |
-| `calibration_report.md` | Factor + spread; per-instrument fill_fraction / n_measured; exclusions |
+| `calibration_report.md` | Factor + spread if >=2 survivors; else **NO CALIBRATION ACHIEVED**; fill_fraction / exclusions |
 | `validation_report.md` | After recording validation — mapping table, PRIMARY / ff / skips |
 
 ---
@@ -111,7 +111,7 @@ Membranes use only **strike** / **decay**.
 3. Cite `modes_per_band_p50` and `energy_w_shimmer_p50` (or the phase you need).
 4. Report the interval: `p05`–`p95` (90% band) or `p25`–`p75` (50% band).
 5. Check `energy_provenance` / `fill_fraction` on the deterministic CSV before treating absolute SPL columns as measurements.
-6. If comparing to pitched-instrument metadata, use the calibration factor and attach the **spread** as uncertainty (provisional under sparse digitization).
+6. If comparing to pitched-instrument metadata, use the calibration factor only when the report defines one (>=2 survivors); otherwise there is **no** conversion factor yet. Attach the **spread** as uncertainty when a factor exists (provisional under sparse digitization).
 
 ---
 
