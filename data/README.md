@@ -86,14 +86,15 @@ fill ≈ 0.59 → `mixed_primary_and_fill`, same machinery as `bassdrum_32in`.
 fitted effective wave speed from the 82 cm modal anchor (`f ∝ 1/a` at
 fixed `c`, `internal_default`) rather than copying measured frequencies.
 
-### Excitation contact times (v0.3.4)
+### Excitation contact times (v0.3.5)
 
 `record_type=excitation_contact_time` rows store Hertzian-impact
-`t_contact_s` per implement (`stick_tip`, `stick_shoulder`, `yarn_mallet`,
-`bass_drum_beater`). FR 1998 §19.7 / Fig. 19.12 discuss contact and
-`f_max(v)` but do not print unambiguous absolute contact times for these
-implement classes — current rows are `internal_default` placeholders
-(see CHANGES.md). Source-read values must never be overwritten by
+`t_contact_s` per implement (`stick_tip`, `stick_shoulder`, `stick_bell`,
+`yarn_mallet`, `bass_drum_beater`). FR / Rossing discuss stick–cymbal
+interaction qualitatively but do not print unambiguous absolute contact
+times for these classes — rows remain `internal_default` placeholders
+(v0.3.5 stick revision; yarn_mallet / bass_drum_beater unchanged — see
+CHANGES.md). Source-read values must never be overwritten by
 placeholders.
 
 ### Provenance label correction (values unchanged)

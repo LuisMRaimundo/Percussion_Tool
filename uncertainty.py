@@ -36,6 +36,8 @@ from model import (
     MembraneInstrument,
     PlateInstrument,
     generate_profile,
+    load_contact_time_s,
+    map_stroke_to_implement,
 )
 
 ROOT = Path(__file__).resolve().parent
@@ -49,6 +51,8 @@ def _lognormal_sigma_for_95pct_span(frac: float) -> float:
 
 SIGMA_THICKNESS_PLATE = _lognormal_sigma_for_95pct_span(0.25)   # ±25%
 SIGMA_THICKNESS_MEMBRANE = _lognormal_sigma_for_95pct_span(0.10)  # ±10%
+# Contact-time uncertainty when stroke is specified (internal_default).
+SIGMA_T_CONTACT = _lognormal_sigma_for_95pct_span(0.50)  # ±50%
 # Diameter / material / decay: "normal, ±X%" read as 1-sigma = X% of
 # nominal (internal_default; tighter than a 95%-span reading).
 SIGMA_DIAMETER_FRAC = 0.01
@@ -254,6 +258,20 @@ def run_monte_carlo(
     if isinstance(instrument, PlateInstrument) and instrument.chladni is not None:
         p_span = chladni_p_span(instrument.name)
 
+    t_contact_nominal: Optional[float] = None
+    t_contact_implement: Optional[str] = None
+    if stroke is not None:
+        pclass = (
+            getattr(instrument, "plate_class", "cymbal")
+            if isinstance(instrument, PlateInstrument)
+            else None
+        )
+        fam = "plate" if isinstance(instrument, PlateInstrument) else "membrane"
+        t_contact_implement = map_stroke_to_implement(
+            stroke, plate_class=pclass, family=fam
+        )
+        t_contact_nominal, _, _ = load_contact_time_s(t_contact_implement)
+
     temp_keys: List[str] = []
     modes_list: List[np.ndarray] = []
     energy_lists: Dict[str, List[np.ndarray]] = {}
@@ -271,11 +289,19 @@ def run_monte_carlo(
             else:
                 draw = _perturb_membrane(instrument, rng)
 
+            t_base: Optional[float] = None
+            if t_contact_nominal is not None:
+                t_base = float(
+                    rng.lognormal(np.log(t_contact_nominal), SIGMA_T_CONTACT)
+                )
+                t_base = max(t_base, 1e-9)
+
             prof = generate_profile(
                 draw,
                 amplitude_layer=amplitude_layer,
                 stroke=stroke,
                 dynamic=dynamic,
+                t_contact_base_s=t_base,
             )
             if band_edges is None:
                 band_edges = prof.band_edges.copy()
@@ -323,6 +349,20 @@ def run_monte_carlo(
             "primary_source" if p_span else None
         ),
         "amplitude_layer": amplitude_layer is not None,
+        "stroke": stroke,
+        "dynamic": dynamic,
+        "t_contact_perturbed": t_contact_nominal is not None,
+        "t_contact_implement": t_contact_implement,
+        "t_contact_nominal_s": t_contact_nominal,
+        "t_contact_sigma_log": (
+            SIGMA_T_CONTACT if t_contact_nominal is not None else None
+        ),
+        "t_contact_95pct_span": (
+            "±50%" if t_contact_nominal is not None else None
+        ),
+        "t_contact_sigma_provenance": (
+            "internal_default" if t_contact_nominal is not None else None
+        ),
     }
     return MonteCarloResult(
         instrument=instrument.name,

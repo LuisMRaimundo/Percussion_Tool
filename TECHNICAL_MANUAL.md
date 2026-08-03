@@ -43,7 +43,7 @@ calibration.py         Scale-commensurability bridge
 sample_metadata.py     Filename/folder parse for validation auto-group
 validate_against_recordings.py   Standalone recording check
 data/source_constants.csv        Digitized literature constants
-pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.4)
+pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.5)
 tests/                           pytest (VAL1/VAL2/VAL3, excitation, MC, WAV)
 ```
 
@@ -141,8 +141,9 @@ Fig. 9.5).
    both set): `E0(f) ← E0(f) / (1+(f/f_c)^4)`, `f_c = 1/(2 t_contact)`.
    `t_contact` from `excitation_contact_time` CSV (source-read wins) else
    placeholders (`internal_default`). Dynamic scale pp/mf/ff =
-   1.6/1.0/0.6 (`internal_default`; Hertz `t ∝ v^(-1/5)` is weaker —
-   factors are conservative).
+   1.6/1.0/0.6 (`internal_default`). **Exception (v0.3.5):** at `ff` for
+   plates the low-pass is bypassed ([R] §9.4); boost stays at full
+   amplitude. MC may override the base `t_contact` (±50% lognormal).
 3. Time evolution: `e(t) ∝ e0 · exp(−6.91·t / τ(f))` (60 dB convention).
 4. Plate buildup/shimmer (cymbal) or shimmer only (tam-tam): Gaussian
    boost around 4 kHz (Rossing Fig. 9.6), amplitude-gated by dynamic
@@ -289,6 +290,7 @@ with `ρc ≈ 413 Pa·s/m`. Sivian “bars” (barye): `1 bar = 0.1 Pa`.
 | E, ρ | normal | σ = 5% | `internal_default` (alloy/film) |
 | Chladni *p* | uniform on Table 9.1 p1–p2 class span | class span | span: `primary_source`; 46 cm → 18″ medium nearest class (`internal_default`) |
 | Decay τ, α | normal | σ = 20% | `literature_derived` fit uncertainty |
+| `t_contact` (when `stroke` set) | lognormal | 95% span ±50% | `internal_default`; recorded in MC meta |
 
 Temporary material keys are registered in `MATERIALS` during a draw and
 removed in a `finally` block. **Not thread-safe** (documented limitation).
@@ -462,7 +464,7 @@ python -m pytest tests/ -q
 
 ## 14. Dependencies
 
-Declared in `pyproject.toml` (`nontunperc` 0.3.4, `requires-python >=3.10`)
+Declared in `pyproject.toml` (`nontunperc` 0.3.5, `requires-python >=3.10`)
 and mirrored in `requirements.txt`:
 
 Python ≥ 3.10 · numpy · scipy · matplotlib · pandas · soundfile  

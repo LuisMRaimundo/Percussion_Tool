@@ -1,7 +1,7 @@
 # NonTunPerc — Quick reference
 
 One-page guide to the GUI options, outputs, and everyday use.
-Version **0.3.4**.
+Version **0.3.5**.
 
 ---
 
@@ -113,9 +113,11 @@ Uncheck instruments you do not need to speed up the run.
 | shimmer | 1.5–6 s | Established HF shimmer |
 | residue | 6–20 s | Long decay |
 
-Membranes use only **strike** / **decay**. When validation supplies
-`stroke` + `dynamic`, a Hertzian contact-time filter shapes `E0`
-(placeholders listed in `CHANGES.md` until source-read).
+Membranes use only **strike** / **decay**. When validation supplies `stroke` + `dynamic`, a Hertzian contact-time
+filter shapes `E0` (stick tip/shoulder/bell shortened in v0.3.5;
+yarn_mallet unchanged — see `CHANGES.md`). At **ff** on plates the
+low-pass is bypassed (full shimmer boost kept). Re-run validation with
+`--baseline <prior validation_summary.json>` to fill old-vs-new ρ.
 
 ---
 

@@ -1,4 +1,4 @@
-# NonTunPerc — non-tuned percussion density model (v0.3.4)
+# NonTunPerc — non-tuned percussion density model (v0.3.5)
 
 A bibliography-based, parametric model that generates **ERB-band spectral
 density profiles** for unpitched percussion from physical input parameters
@@ -87,15 +87,18 @@ AmplitudeLayer **accepts** coverage (fill_fraction ≤ 0.60), equipartition
 is replaced by measured / mixed band weights (see §3); mostly-filled
 vectors are refused.
 
-**Excitation filter (v0.3.4):** when `generate_profile(..., stroke=, dynamic=)`
+**Excitation filter (v0.3.5):** when `generate_profile(..., stroke=, dynamic=)`
 are both set, the initial energy is low-passed by a Hertzian contact-time
 filter `E0(f) ∝ 1/(1+(f/f_c)^4)` with `f_c ≈ 1/(2 t_contact)`. Contact
 times load from `excitation_contact_time` rows (source-read wins);
-placeholders (`internal_default`) are flagged in profile notes. Dynamic
-scales `t_contact` (pp×1.6, mf×1.0, ff×0.6; Hertz predicts only weak
-`t ∝ v^(-1/5)` — factors are deliberately conservative). The 3–5 kHz
-shimmer boost is dynamic-gated (pp off, mf ×0.5, ff full). With both
-`stroke` and `dynamic` unset, behaviour is bit-identical to v0.3.3.
+placeholders (`internal_default`) are flagged in profile notes. Stick
+placeholders (tip 0.15 ms, shoulder 0.3 ms, bell 0.10 ms) are shorter
+than v0.3.4; yarn_mallet / bass_drum_beater unchanged. Dynamic scales
+`t_contact` (pp×1.6, mf×1.0, ff×0.6). At **`ff` for plates** the low-pass
+is **bypassed** (Rossing 2000 §9.4 cascade regenerates HF); the 3–5 kHz
+boost stays at full amplitude. pp/mf gating unchanged (pp off, mf ×0.5,
+ff full). With both `stroke` and `dynamic` unset, behaviour is
+bit-identical to v0.3.3.
 
 **Tam-tam template:** `plate_class="tamtam"` selects
 `PLATE_PHASES_TAMTAM` (strike / bloom / shimmer / residue) with HF
@@ -212,15 +215,27 @@ folder metadata only — never by fitting physical parameters from audio.
 python validate_against_recordings.py --gui
 python validate_against_recordings.py --cli --auto-group --wav-dir <folder>
 python validate_against_recordings.py --cli --auto-group --wav-dir <folder> \
-    --baseline validation_summary.json
+    --baseline path/to/previous/validation_summary.json
 python validate_against_recordings.py --cli --no-auto-group --wav-dir <folder> \
     --instrument cymbal_46cm_medium [--out report_dir]
 ```
 
 Auto-group passes each group's `(stroke, dynamic)` into the model
 (contact-time filter + tam-tam template). PRIMARY gates are unchanged;
-stick and mallet cohorts are reported separately. Optional `--baseline`
-prints previous vs new ρ per group.
+stick and mallet cohorts are reported separately.
+
+**Re-run with baseline (required to populate old-vs-new ρ):** keep the
+previous run's `validation_summary.json` and pass it as `--baseline`.
+Example after upgrading to v0.3.5:
+
+```text
+python validate_against_recordings.py --cli --auto-group ^
+  --wav-dir "D:\Samples" ^
+  --out validation_out_v035 ^
+  --baseline validation_out/validation_summary.json
+```
+
+Without `--baseline`, the report's "previous ρ" column stays empty.
 
 
 It mono-mixes / resamples audio to 44.1 kHz, detects onsets (10× noise

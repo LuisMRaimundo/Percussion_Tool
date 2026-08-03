@@ -517,10 +517,11 @@ MEMBRANE_PHASES = {
 # Hertzian-impact contact-time placeholders (s) when CSV has no source row.
 # internal_default — NEVER overwrite a source-read CSV value with these.
 _CONTACT_TIME_PLACEHOLDERS_S: Dict[str, float] = {
-    "stick_tip": 0.4e-3,       # f_c ≈ 1.25 kHz
-    "stick_shoulder": 0.7e-3,
-    "yarn_mallet": 3.0e-3,     # f_c ≈ 167 Hz
-    "bass_drum_beater": 6.0e-3,
+    "stick_tip": 0.15e-3,      # v0.3.5; f_c ≈ 3.33 kHz
+    "stick_shoulder": 0.3e-3,  # v0.3.5
+    "stick_bell": 0.10e-3,     # v0.3.5; near-impulsive dome strike
+    "yarn_mallet": 3.0e-3,     # unchanged v0.3.4 (mallet cohort validated)
+    "bass_drum_beater": 6.0e-3,  # unchanged v0.3.4
 }
 # Dynamic scaling of t_contact (internal_default). Hertz theory predicts
 # t ∝ v^(-1/5) (weak force dependence); these factors are deliberately
@@ -543,9 +544,10 @@ _STROKE_TO_IMPLEMENT: Dict[str, str] = {
     "mallet": "yarn_mallet",
     "stick.normal": "stick_tip",
     "stick.shoulder": "stick_shoulder",
-    "stick.bell": "stick_tip",
+    "stick.bell": "stick_bell",
     "stick_tip": "stick_tip",
     "stick_shoulder": "stick_shoulder",
+    "stick_bell": "stick_bell",
     "yarn_mallet": "yarn_mallet",
     "bass_drum_beater": "bass_drum_beater",
 }
@@ -1079,6 +1081,7 @@ def generate_profile(
     stroke: Optional[str] = None,
     dynamic: Optional[str] = None,
     csv_path: Optional[Path] = None,
+    t_contact_base_s: Optional[float] = None,
 ) -> DensityProfile:
     """Generate an ERB density profile; optionally apply AmplitudeLayer.
 
@@ -1086,7 +1089,12 @@ def generate_profile(
     bit-identical to v0.3.3 (equipartition / AmplitudeLayer path with full
     shimmer boost). When both are set, a Hertzian contact-time low-pass
     filters the initial energy and the 3–5 kHz shimmer boost is
-    dynamic-gated.
+    dynamic-gated — except at ``dynamic="ff"`` for **plates**, where the
+    low-pass is bypassed ([R] §9.4 nonlinear cascade regenerates HF) while
+    the boost stays at full amplitude.
+
+    ``t_contact_base_s`` optionally overrides the loaded base contact time
+    before dynamic scaling (used by Monte Carlo perturbation).
     """
     edges = erb_band_edges(f_lo, f_hi)
     centres = np.sqrt(edges[:-1] * edges[1:])
@@ -1150,6 +1158,7 @@ def generate_profile(
     # Bit-identity path: both unset → full shimmer boost, no contact filter.
     excitation_active = stroke is not None and dynamic is not None
     shimmer_gate = 1.0
+    apply_lp_filter = False
     if excitation_active:
         dyn = str(dynamic).lower()
         shimmer_gate = float(_DYNAMIC_SHIMMER_GATE.get(dyn, 1.0))
@@ -1157,17 +1166,31 @@ def generate_profile(
             stroke, plate_class=pclass, family=family
         )
         t0, t_prov, used_ph = load_contact_time_s(implement, csv_path=csv_path)
+        if t_contact_base_s is not None:
+            t0 = float(t_contact_base_s)
+            t_prov = f"{t_prov}+mc_perturbed"
         scale = float(_DYNAMIC_T_CONTACT_SCALE.get(dyn, 1.0))
         t_contact = t0 * scale
         f_c = excitation_cutoff_hz(t_contact)
-        notes.append(
-            f"excitation filter active: stroke={stroke}, dynamic={dyn}, "
-            f"implement={implement}, t_contact={t_contact:.4e} s "
-            f"(base {t0:.4e} s x dynamic_scale={scale}), "
-            f"f_c={f_c:.1f} Hz, t_contact_provenance={t_prov}, "
-            f"shimmer_gate={shimmer_gate}"
-        )
-        if used_ph:
+        # ff plate bypass: nonlinear cascade regenerates HF ([R] §9.4).
+        apply_lp_filter = not (dyn == "ff" and family == "plate")
+        if apply_lp_filter:
+            notes.append(
+                f"excitation filter active: stroke={stroke}, dynamic={dyn}, "
+                f"implement={implement}, t_contact={t_contact:.4e} s "
+                f"(base {t0:.4e} s x dynamic_scale={scale}), "
+                f"f_c={f_c:.1f} Hz, t_contact_provenance={t_prov}, "
+                f"shimmer_gate={shimmer_gate}"
+            )
+        else:
+            notes.append(
+                f"ff excitation low-pass bypassed for plates "
+                f"([R] sec. 9.4 nonlinear cascade); shimmer boost at full "
+                f"amplitude; stroke={stroke}, implement={implement}, "
+                f"t_contact={t_contact:.4e} s (recorded, not applied to E0), "
+                f"t_contact_provenance={t_prov}, shimmer_gate={shimmer_gate}"
+            )
+        if used_ph and t_contact_base_s is None:
             notes.append(
                 f"t_contact placeholder in use for {implement} "
                 f"(internal_default; awaiting source-read)"
@@ -1182,7 +1205,7 @@ def generate_profile(
                 f"fill_fraction={fill_fraction:.3f}; "
                 f"ref distance {ref_dist:.4f} m"
             )
-            if excitation_active and t_contact is not None:
+            if apply_lp_filter and t_contact is not None:
                 e0 = apply_excitation_filter(e0, centres, t_contact)
             rel = _band_energy_weights(
                 instr, edges, phases, e0=e0, shimmer_gate=shimmer_gate
@@ -1210,10 +1233,10 @@ def generate_profile(
                 f"measurement); using equipartition (internal_default)"
             )
 
-    if e0 is None and excitation_active and t_contact is not None:
+    if e0 is None and apply_lp_filter and t_contact is not None:
         e0_eq = counts / max(counts.sum(), 1e-12)
         e0 = apply_excitation_filter(e0_eq, centres, t_contact)
-    elif excitation_active and t_contact is not None and e0 is not None:
+    elif apply_lp_filter and t_contact is not None and e0 is not None:
         e0 = apply_excitation_filter(e0, centres, t_contact)
 
     weights = _band_energy_weights(

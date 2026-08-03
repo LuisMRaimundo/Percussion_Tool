@@ -1,5 +1,37 @@
 # CHANGES
 
+## v0.3.5 — Stick contact times, ff filter bypass, t_contact in MC
+
+- **Stick contact-time revision** (`internal_default` placeholders; FR /
+  Rossing 2000 discuss stick–cymbal interaction qualitatively but do not
+  print unambiguous absolute `t_contact` for these implement classes —
+  no `primary_source` overwrite). New placeholders:
+
+  | implement | t_contact (mf) | notes |
+  |---|---:|---|
+  | `stick_tip` | 0.15 ms | was 0.4 ms |
+  | `stick_shoulder` | 0.3 ms | was 0.7 ms |
+  | `stick_bell` | 0.10 ms | new; near-impulsive dome/bell |
+  | `yarn_mallet` | 3.0 ms | **UNCHANGED** — validated by mallet-cohort improvement in the Iowa re-gate |
+  | `bass_drum_beater` | 6.0 ms | **UNCHANGED** — same rationale |
+
+  `stick.bell` now maps to `stick_bell` (was aliased to `stick_tip`).
+- **ff plate bypass:** at `dynamic="ff"` the excitation low-pass is
+  disabled for plate instruments (nonlinear cascade regenerates HF
+  independently of excitation content, Rossing 2000 §9.4); the 3–5 kHz
+  boost remains at full amplitude. pp/mf behaviour unchanged. Membranes
+  keep the low-pass at ff.
+- **MC:** when `stroke` is specified, `t_contact` is perturbed lognormal
+  with 95% span ±50% (`internal_default`); recorded in MC meta as
+  `t_contact_sigma_log` / `t_contact_95pct_span`. Expected: wider
+  intervals, better inside90 coverage.
+- **Validation re-run:** pass `--baseline <prior validation_summary.json>`
+  so the report fills previous-ρ vs new-ρ (see README).
+- Package version → `0.3.5`. Mallet-path (yarn_mallet @ pp/mf) remains
+  bit-identical to v0.3.4. Docs synced: README (stick times, ff bypass,
+  `--baseline` re-run); TECHNICAL_MANUAL (§4.4, MC `t_contact`);
+  QUICK_REFERENCE; `data/README.md`; `cursor_prompt_idiophone_density.md`.
+
 ## v0.3.4 — (stroke, dynamic) excitation filter + tam-tam template
 
 Repairs the falsified universal equipartition / ff-shimmer convention

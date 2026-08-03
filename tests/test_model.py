@@ -601,3 +601,67 @@ def test_size_sweep_mc_medians_monotone_intervals_nested() -> None:
     assert all(meds[i] <= meds[i + 1] + 1e-9 for i in range(len(meds) - 1))
     for r in rows:
         assert r["p05"] <= r["p25"] <= r["p50"] <= r["p75"] <= r["p95"]
+
+
+def test_v035_stick_hf_above_mallet_and_ff_bypass() -> None:
+    cy = PlateInstrument(
+        "cymbal_46cm_medium", 0.460, 0.0012, chladni=(14.93, 3.0, 1.557)
+    )
+    tip = _hf_share(generate_profile(cy, stroke="stick.normal", dynamic="mf"))
+    mal = _hf_share(generate_profile(cy, stroke="mallet", dynamic="mf"))
+    assert tip > mal
+    ff = _hf_share(generate_profile(cy, stroke="stick.normal", dynamic="ff"))
+    mf = _hf_share(generate_profile(cy, stroke="stick.normal", dynamic="mf"))
+    assert ff >= mf
+
+
+def test_mc_meta_contains_t_contact_sigma() -> None:
+    from uncertainty import SIGMA_T_CONTACT, run_monte_carlo
+
+    cy = PlateInstrument(
+        "cymbal_46cm_medium", 0.460, 0.0012, chladni=(14.93, 3.0, 1.557)
+    )
+    mc = run_monte_carlo(
+        cy, n_draws=30, seed=1, stroke="stick.normal", dynamic="mf"
+    )
+    assert mc.metadata["t_contact_perturbed"] is True
+    assert mc.metadata["t_contact_sigma_log"] == pytest.approx(SIGMA_T_CONTACT)
+    assert mc.metadata["t_contact_95pct_span"] == "±50%"
+    assert mc.metadata["t_contact_nominal_s"] == pytest.approx(0.15e-3)
+
+
+def test_mallet_path_bit_identical_v034() -> None:
+    """yarn_mallet @ pp/mf unchanged from v0.3.4 (contact time + filter path)."""
+    from model import (
+        PLATE_PHASES,
+        apply_excitation_filter,
+        erb_band_edges,
+        _band_energy_weights,
+        _band_mode_counts,
+    )
+
+    t_yarn, prov, used_ph = load_contact_time_s("yarn_mallet")
+    assert t_yarn == pytest.approx(3.0e-3)
+    assert used_ph is True
+    t_beater, _, _ = load_contact_time_s("bass_drum_beater")
+    assert t_beater == pytest.approx(6.0e-3)
+
+    cy = PlateInstrument(
+        "cymbal_46cm_medium", 0.460, 0.0012, chladni=(14.93, 3.0, 1.557)
+    )
+    for dyn, gate, scale in (("mf", 0.5, 1.0), ("pp", 0.0, 1.6)):
+        got = generate_profile(cy, stroke="mallet", dynamic=dyn)
+        edges = erb_band_edges(20.0, 16000.0)
+        centres = np.sqrt(edges[:-1] * edges[1:])
+        counts = _band_mode_counts(cy, edges)
+        e0 = apply_excitation_filter(
+            counts / counts.sum(), centres, t_yarn * scale
+        )
+        ref = _band_energy_weights(
+            cy, edges, PLATE_PHASES, e0=e0, shimmer_gate=gate
+        )
+        for ph in got.energy_weights:
+            np.testing.assert_allclose(
+                got.energy_weights[ph], ref[ph], rtol=0, atol=0
+            )
+        assert got.t_contact_s == pytest.approx(t_yarn * scale)
