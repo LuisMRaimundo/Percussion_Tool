@@ -7,11 +7,16 @@ Standalone empirical check of the idiophone density model against real
 
 Self-contained: imports only numpy, scipy, soundfile (librosa optional
 fallback for resample), matplotlib, and local ``model.py`` /
-``uncertainty.py``. Does **not** write measured values into
-``data/source_constants.csv`` or any ``primary_source`` field.
+``uncertainty.py`` / ``sample_metadata.py``. Does **not** write measured
+values into ``data/source_constants.csv`` or any ``primary_source`` field.
+
+Grouping (``--auto-group``) is **metadata-only**: size/type/stroke/dynamic
+are parsed from filenames and folders. Physical parameters are never
+estimated from the audio (circularity refusal — hard rule).
 
 CLI
 ---
+python validate_against_recordings.py --wav-dir <folder> --auto-group
 python validate_against_recordings.py --wav-dir <folder> \\
     --instrument cymbal_46cm_medium [--out report_dir]
 """
@@ -20,6 +25,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -38,7 +45,18 @@ from model import (
     erb_band_edges,
     generate_profile,
 )
+from sample_metadata import (
+    ModelMapping,
+    SampleMeta,
+    classify_paths,
+    parse_sample_path,
+    resolve_model,
+)
 from uncertainty import DEFAULT_SEED, run_monte_carlo
+
+# Aggregate pass/fail thresholds for PRIMARY (pp/mf) groups (internal_default).
+_AGG_RHO_MIN = 0.50
+_AGG_INSIDE90_MIN = 0.40
 
 ROOT = Path(__file__).resolve().parent
 TARGET_SR = 44100
@@ -322,6 +340,7 @@ def analyse_file(
     segs = phase_segments(y, sr, onset)
     result = {
         "file": path.name,
+        "path": str(path.resolve()),
         "sr": sr,
         "onset_s": onset / sr,
         "phases": {},
@@ -539,6 +558,411 @@ def write_report(
     return path
 
 
+def _slug(parts: Sequence[str]) -> str:
+    raw = "__".join(parts)
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", raw)[:120]
+
+
+def _metrics_jsonable(metrics: dict) -> dict:
+    return {
+        k: (v.tolist() if isinstance(v, np.ndarray) else v)
+        for k, v in metrics.items()
+    }
+
+
+def _run_one_group(
+    metas: Sequence[SampleMeta],
+    mapping: ModelMapping,
+    edges: np.ndarray,
+    out_dir: Path,
+    mc_cache: dict,
+    mc_draws: int,
+    mc_seed: int,
+) -> dict:
+    """Analyse one (instrument, stroke, dynamic) group vs its model."""
+    file_results = [analyse_file(m.path, edges) for m in metas]
+    meas_med, meas_spread = aggregate_weights(file_results, "shimmer")
+
+    cache_key = (
+        mapping.instrument.name,
+        mapping.diameter_m,
+        mapping.thickness_m,
+        mapping.catalogue_match,
+    )
+    if cache_key not in mc_cache:
+        mc_cache[cache_key] = run_monte_carlo(
+            mapping.instrument, n_draws=mc_draws, seed=mc_seed
+        )
+    mc = mc_cache[cache_key]
+    metrics = compare_to_model(meas_med, mc, phase="shimmer")
+
+    stroke = metas[0].stroke or "?"
+    dynamic = metas[0].dynamic or "?"
+    fig_name = _slug(
+        [mapping.instrument_id, stroke, dynamic, "comparison"]
+    ) + ".png"
+    fig_path = out_dir / "figures" / fig_name
+    fig_path.parent.mkdir(parents=True, exist_ok=True)
+    plot_comparison(meas_med, meas_spread, mc, "shimmer", fig_path)
+
+    hf_bias = metrics["log_ratio_bias_above_10k"]
+    # measured > model at HF ⇒ positive bias ⇒ model underpredicts HF
+    ff_corroborating = (
+        dynamic == "ff"
+        and np.isfinite(hf_bias)
+        and hf_bias > 0.0
+    )
+    group_pass = (
+        metrics["spearman_rho"] >= _AGG_RHO_MIN
+        and metrics["frac_inside_90"] >= _AGG_INSIDE90_MIN
+    )
+    return {
+        "instrument_id": mapping.instrument_id,
+        "stroke": stroke,
+        "dynamic": dynamic,
+        "n_files": len(file_results),
+        "files": [str(m.path) for m in metas],
+        "plate_class": mapping.plate_class,
+        "subtype": mapping.subtype,
+        "transfer_caution": mapping.transfer_caution,
+        "provenance": mapping.provenance,
+        "catalogue_match": mapping.catalogue_match,
+        "diameter_in": mapping.diameter_in,
+        "diameter_m": mapping.diameter_m,
+        "thickness_m": mapping.thickness_m,
+        "regime": (
+            "nonlinear-regime probe"
+            if dynamic == "ff"
+            else ("PRIMARY" if dynamic in {"pp", "mf"} else "other")
+        ),
+        "in_aggregate": (
+            dynamic in {"pp", "mf"} and not mapping.transfer_caution
+        ),
+        "group_supports_profile": group_pass,
+        "ff_hf_underprediction_corroborating": ff_corroborating,
+        "metrics": _metrics_jsonable(metrics),
+        "figure": str(fig_path),
+        "file_results": file_results,
+        "mc_meta": mc.metadata,
+    }
+
+
+def write_grouped_report(
+    out_dir: Path,
+    sample_dir: Path,
+    mapping_rows: Sequence[dict],
+    pitched: Sequence[SampleMeta],
+    unparseable: Sequence[SampleMeta],
+    primary_groups: Sequence[dict],
+    ff_groups: Sequence[dict],
+    caution_groups: Sequence[dict],
+    aggregate: dict,
+) -> Path:
+    path = out_dir / "validation_report.md"
+    lines: List[str] = [
+        "# Validation report — metadata auto-group",
+        "",
+        f"Sample folder: `{sample_dir}`",
+        "",
+        "## Hard rule — no audio→parameter fitting",
+        "",
+        "Grouping and model selection are **metadata-only** (filenames /",
+        "folders). Physical parameters are **never** estimated from the",
+        "audio. Fitting diameter/thickness to the same recordings under",
+        "test would be circular and is refused.",
+        "",
+        "## Skipped files",
+        "",
+        "### Unparseable (listed first; no guess made)",
+        "",
+    ]
+    if not unparseable:
+        lines.append("_None._")
+    else:
+        for m in unparseable:
+            lines.append(f"- `{m.path}` — {m.skip_reason}")
+    lines += [
+        "",
+        "### Tuned / pitched (outside NonTunPerc validity scope)",
+        "",
+    ]
+    if not pitched:
+        lines.append("_None._")
+    else:
+        for m in pitched:
+            extra = f" ({', '.join(m.notes)})" if m.notes else ""
+            lines.append(f"- `{m.path}` — {m.skip_reason}{extra}")
+
+    lines += [
+        "",
+        "## File → model mapping",
+        "",
+        "| file | instrument_id | stroke | dynamic | model | "
+        "Ø (in) | h (mm) | provenance | notes |",
+        "|---|---|---|---|---|---:|---:|---|---|",
+    ]
+    for row in mapping_rows:
+        notes = "; ".join(row.get("notes") or []) or "—"
+        lines.append(
+            f"| `{row['file']}` | `{row['instrument_id']}` | "
+            f"{row['stroke']} | {row['dynamic']} | "
+            f"`{row['model_name']}` | {row['diameter_in']:.0f} | "
+            f"{row['thickness_mm']:.2f} | {row['provenance']} | {notes} |"
+        )
+
+    def _emit_group_section(title: str, groups: Sequence[dict], blurb: str) -> None:
+        lines.extend(["", f"## {title}", "", blurb, ""])
+        if not groups:
+            lines.append("_No groups in this section._")
+            return
+        for g in groups:
+            lines.append(
+                f"### `{g['instrument_id']}` · stroke=`{g['stroke']}` · "
+                f"dynamic=`{g['dynamic']}` ({g['n_files']} files)"
+            )
+            lines.append("")
+            if g["transfer_caution"]:
+                lines.append(
+                    "- **Transfer caution:** chinese/splash/ride — Chladni "
+                    "crash-type fits may not transfer; band-profile metrics "
+                    "only; **excluded from aggregate pass/fail**."
+                )
+            if g["subtype"] == "windgong":
+                lines.append(
+                    "- **Sub-type:** wind gong (in-scope plate; reported "
+                    "distinct from tam-tam)."
+                )
+            m = g["metrics"]
+            lines.append(
+                f"- Spearman ρ = **{m['spearman_rho']:.4f}** "
+                f"(p={m['spearman_p']:.3g})"
+            )
+            lines.append(
+                f"- Fraction inside model 90% = **{m['frac_inside_90']:.3f}**"
+            )
+            lines.append(
+                f"- log-ratio bias mean = {m['log_ratio_bias_mean']:.4f}; "
+                f"<500 Hz = {m['log_ratio_bias_low_f']:.4f}; "
+                f">10 kHz = {m['log_ratio_bias_above_10k']:.4f}"
+            )
+            lines.append(f"- Model provenance: {g['provenance']}")
+            if g["catalogue_match"]:
+                lines.append(f"- Catalogue match: `{g['catalogue_match']}`")
+            lines.append(f"- Figure: `{g['figure']}`")
+            if g["regime"] == "nonlinear-regime probe":
+                lines.append(
+                    "- **Label:** nonlinear-regime probe — model expected "
+                    "to underpredict HF occupation."
+                )
+                if g["ff_hf_underprediction_corroborating"]:
+                    lines.append(
+                        "- HF log-ratio bias > 0 (measured > model): "
+                        "**corroborating**, not a failure."
+                    )
+                elif np.isfinite(m["log_ratio_bias_above_10k"]):
+                    lines.append(
+                        "- HF log-ratio bias ≤ 0: not the expected "
+                        "underprediction direction; treat as inconclusive "
+                        "for the linear model (not counted as PRIMARY fail)."
+                    )
+            elif g["in_aggregate"]:
+                flag = "supports profile" if g["group_supports_profile"] else "weak / fail"
+                lines.append(
+                    f"- PRIMARY gate "
+                    f"(ρ≥{_AGG_RHO_MIN}, inside90≥{_AGG_INSIDE90_MIN}): "
+                    f"**{flag}**"
+                )
+            lines.append("")
+
+    _emit_group_section(
+        "PRIMARY validation (pp / mf)",
+        primary_groups,
+        "Groups with dynamic `pp` or `mf`, excluding chinese/splash/ride "
+        "from aggregate statistics. Band-profile (shimmer energy weights) "
+        "is the durable claim.",
+    )
+    _emit_group_section(
+        "Transfer-caution types (chinese / splash / ride)",
+        caution_groups,
+        "Band-profile metrics reported for inspection only. Chladni "
+        "anchors are crash-type; these subtypes stay **out of** aggregate "
+        "pass/fail.",
+    )
+    _emit_group_section(
+        "ff groups — nonlinear-regime probe",
+        ff_groups,
+        "Model expected to underpredict HF occupation. An ff mismatch in "
+        "that direction is **corroborating**, not a failure.",
+    )
+
+    lines += [
+        "## Aggregate pass/fail (PRIMARY only)",
+        "",
+        f"- PRIMARY groups counted: **{aggregate['n_primary']}**",
+        f"- Supporting profile "
+        f"(ρ≥{_AGG_RHO_MIN} and inside90≥{_AGG_INSIDE90_MIN}): "
+        f"**{aggregate['n_support']}**",
+        f"- Median Spearman ρ: **{aggregate['median_rho']:.4f}**",
+        f"- Median inside-90: **{aggregate['median_inside90']:.4f}**",
+        f"- Aggregate verdict: **{aggregate['verdict']}**",
+        "",
+        "chinese/splash/ride and all `ff` groups are excluded from this "
+        "aggregate by design.",
+        "",
+        "## Claims scope (reminder)",
+        "",
+        "- Supports relative shimmer band-profile / rank order when PRIMARY "
+        "gates pass.",
+        "- Does **not** support absolute SPL, loud chaotic crashes as "
+        "linear-model failures, or >10 kHz mic-chain disagreements.",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def run_validation_auto(
+    wav_dir: Path,
+    out_dir: Optional[Path] = None,
+    mc_draws: int = 400,
+    mc_seed: int = DEFAULT_SEED,
+    recursive: bool = True,
+) -> dict:
+    """Metadata-only auto-group validation across a sample tree."""
+    wav_dir = Path(wav_dir)
+    out_dir = Path(out_dir) if out_dir else ROOT / "validation_out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    wavs = find_sample_files(wav_dir, recursive=recursive)
+    if not wavs:
+        scope = "recursively under" if recursive else "in"
+        raise FileNotFoundError(
+            f"no audio samples (.wav/.aif/.aiff/.flac) {scope} {wav_dir}"
+        )
+
+    ok, pitched, unparseable = classify_paths(wavs)
+    edges = erb_band_edges(20.0, 16000.0)
+
+    # Group key = (instrument, stroke, dynamic)
+    groups: Dict[Tuple[str, str, str], List[SampleMeta]] = defaultdict(list)
+    mappings: Dict[str, ModelMapping] = {}
+    mapping_rows: List[dict] = []
+
+    for meta in ok:
+        key = meta.group_key
+        assert key is not None
+        if meta.instrument_id not in mappings:
+            mappings[meta.instrument_id] = resolve_model(meta)
+        mapping = mappings[meta.instrument_id]
+        groups[key].append(meta)
+        mapping_rows.append(
+            {
+                "file": str(meta.path),
+                "instrument_id": meta.instrument_id,
+                "stroke": meta.stroke,
+                "dynamic": meta.dynamic,
+                "model_name": mapping.instrument.name,
+                "catalogue_match": mapping.catalogue_match,
+                "diameter_in": mapping.diameter_in,
+                "thickness_mm": mapping.thickness_m * 1000.0,
+                "provenance": mapping.provenance,
+                "notes": list(meta.notes),
+            }
+        )
+
+    mapping_rows.sort(key=lambda r: (r["instrument_id"], r["stroke"], r["dynamic"], r["file"]))
+
+    mc_cache: dict = {}
+    primary_groups: List[dict] = []
+    ff_groups: List[dict] = []
+    caution_groups: List[dict] = []
+
+    for key in sorted(groups.keys()):
+        metas = groups[key]
+        mapping = mappings[metas[0].instrument_id]  # type: ignore[index]
+        g = _run_one_group(
+            metas, mapping, edges, out_dir, mc_cache, mc_draws, mc_seed
+        )
+        # Drop bulky per-file arrays from JSON later
+        if g["dynamic"] == "ff":
+            ff_groups.append(g)
+        elif g["transfer_caution"]:
+            caution_groups.append(g)
+        elif g["dynamic"] in {"pp", "mf"}:
+            primary_groups.append(g)
+        else:
+            caution_groups.append(g)
+
+    rhos = [g["metrics"]["spearman_rho"] for g in primary_groups]
+    insides = [g["metrics"]["frac_inside_90"] for g in primary_groups]
+    n_support = sum(1 for g in primary_groups if g["group_supports_profile"])
+    n_primary = len(primary_groups)
+    if n_primary == 0:
+        verdict = "no PRIMARY groups"
+    elif n_support >= max(1, (n_primary + 1) // 2):
+        verdict = "PASS (majority of PRIMARY groups support profile)"
+    else:
+        verdict = "FAIL (majority of PRIMARY groups below gate)"
+
+    aggregate = {
+        "n_primary": n_primary,
+        "n_support": n_support,
+        "median_rho": float(np.median(rhos)) if rhos else float("nan"),
+        "median_inside90": float(np.median(insides)) if insides else float("nan"),
+        "verdict": verdict,
+        "rho_min": _AGG_RHO_MIN,
+        "inside90_min": _AGG_INSIDE90_MIN,
+    }
+
+    report = write_grouped_report(
+        out_dir,
+        wav_dir.resolve(),
+        mapping_rows,
+        pitched,
+        unparseable,
+        primary_groups,
+        ff_groups,
+        caution_groups,
+        aggregate,
+    )
+
+    def _slim(g: dict) -> dict:
+        return {k: v for k, v in g.items() if k not in {"file_results", "mc_meta"}}
+
+    summary = {
+        "mode": "auto_group",
+        "sample_dir": str(wav_dir.resolve()),
+        "recursive": recursive,
+        "n_files_found": len(wavs),
+        "n_ok": len(ok),
+        "n_skip_pitched": len(pitched),
+        "n_unparseable": len(unparseable),
+        "n_groups": len(groups),
+        "aggregate": aggregate,
+        "mapping": mapping_rows,
+        "primary_groups": [_slim(g) for g in primary_groups],
+        "ff_groups": [_slim(g) for g in ff_groups],
+        "caution_groups": [_slim(g) for g in caution_groups],
+        "skipped_pitched": [
+            {"file": str(m.path), "reason": m.skip_reason} for m in pitched
+        ],
+        "unparseable": [
+            {"file": str(m.path), "reason": m.skip_reason} for m in unparseable
+        ],
+        "report": str(report),
+        # Compatibility fields for GUI that expects metrics/n_files
+        "n_files": len(ok),
+        "metrics": {
+            "spearman_rho": aggregate["median_rho"],
+            "frac_inside_90": aggregate["median_inside90"],
+        },
+    }
+    (out_dir / "validation_summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
+    return summary
+
+
 # ----------------------------------------------------------------------
 # Public entry
 # ----------------------------------------------------------------------
@@ -550,8 +974,18 @@ def run_validation(
     mc_draws: int = 400,
     mc_seed: int = DEFAULT_SEED,
     recursive: bool = True,
+    auto_group: bool = False,
 ) -> dict:
     """Run the full validation pipeline; write report + figure."""
+    if auto_group:
+        return run_validation_auto(
+            wav_dir,
+            out_dir=out_dir,
+            mc_draws=mc_draws,
+            mc_seed=mc_seed,
+            recursive=recursive,
+        )
+
     wav_dir = Path(wav_dir)
     out_dir = Path(out_dir) if out_dir else ROOT / "validation_out"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -585,14 +1019,12 @@ def run_validation(
 
     # JSON sidecar (no write-back to source_constants)
     summary = {
+        "mode": "manual_instrument",
         "instrument": instrument_name,
         "n_files": len(file_results),
         "recursive": recursive,
         "sample_dir": str(wav_dir.resolve()),
-        "metrics": {
-            k: (v.tolist() if isinstance(v, np.ndarray) else v)
-            for k, v in metrics.items()
-        },
+        "metrics": _metrics_jsonable(metrics),
         "report": str(report),
         "figure": str(fig_path),
     }
@@ -655,9 +1087,9 @@ def launch_validate_gui() -> None:
     )
     ttk.Label(
         hdr,
-        text="Choose the folder that holds single-stroke samples "
-        "(.wav / .aif / .flac). Subfolders are searched by default. "
-        "Report only — no write-back to source constants.",
+        text="Choose a sample folder (.wav / .aif / .flac). "
+        "Auto-group parses size/type/stroke/dynamic from names only "
+        "(never from audio). Report only — no write-back.",
         style="Sub.TLabel",
     ).pack(anchor="w")
 
@@ -665,11 +1097,15 @@ def launch_validate_gui() -> None:
     card.pack(fill="x", padx=16, pady=8)
     card.configure(padding=12)
 
-    wav_var = tk.StringVar(value=str(ROOT / "wavs"))
+    samples_default = ROOT / "Samples"
+    wav_var = tk.StringVar(
+        value=str(samples_default if samples_default.is_dir() else ROOT / "wavs")
+    )
     out_var = tk.StringVar(value=str(ROOT / "validation_out"))
     instr_var = tk.StringVar(value="cymbal_46cm_medium")
     draws_var = tk.StringVar(value="400")
     recursive_var = tk.BooleanVar(value=True)
+    auto_var = tk.BooleanVar(value=True)
     status_var = tk.StringVar(value="Select a sample folder, then Run.")
 
     def browse_wav() -> None:
@@ -725,18 +1161,32 @@ def launch_validate_gui() -> None:
     ).grid(row=row, column=0, sticky="w", pady=(6, 2))
     row += 1
 
-    ttk.Label(card, text="Instrument model", style="Card.TLabel").grid(
+    def sync_instrument_state(*_args) -> None:
+        state = "disabled" if auto_var.get() else "readonly"
+        instr_combo.configure(state=state)
+
+    ttk.Checkbutton(
+        card,
+        text="Auto-group from filenames (metadata only)",
+        variable=auto_var,
+        command=sync_instrument_state,
+    ).grid(row=row, column=0, sticky="w", pady=(2, 2))
+    row += 1
+
+    ttk.Label(card, text="Instrument model (manual mode)", style="Card.TLabel").grid(
         row=row, column=0, sticky="w", pady=(10, 2)
     )
     row += 1
-    ttk.Combobox(
+    instr_combo = ttk.Combobox(
         card,
         textvariable=instr_var,
         values=sorted(_CATALOGUE),
-        state="readonly",
+        state="disabled",
         width=40,
-    ).grid(row=row, column=0, sticky="w")
+    )
+    instr_combo.grid(row=row, column=0, sticky="w")
     row += 1
+    sync_instrument_state()
 
     ttk.Label(card, text="Report output folder", style="Card.TLabel").grid(
         row=row, column=0, sticky="w", pady=(10, 2)
@@ -806,13 +1256,16 @@ def launch_validate_gui() -> None:
                 f"{'under' if recursive else 'in'}:\n{wav_dir}",
             )
             return
+        auto_group = bool(auto_var.get())
         running["flag"] = True
         run_btn.state(["disabled"])
         status_var.set("Running validation…")
         append_log("=== Validation start ===")
         append_log(f"Sample dir: {wav_dir}")
         append_log(f"Recursive : {recursive}")
-        append_log(f"Instrument: {instr_var.get()}")
+        append_log(f"Auto-group: {auto_group}")
+        if not auto_group:
+            append_log(f"Instrument: {instr_var.get()}")
         append_log(f"Out dir   : {out_var.get()}")
         append_log(f"Files     : {n}")
 
@@ -824,24 +1277,45 @@ def launch_validate_gui() -> None:
                     out_dir=Path(out_var.get()),
                     mc_draws=int(draws_var.get()),
                     recursive=recursive,
+                    auto_group=auto_group,
                 )
                 rho = summary["metrics"]["spearman_rho"]
                 inside = summary["metrics"]["frac_inside_90"]
-                append_log(
-                    f"[VAL] files={summary['n_files']}  "
-                    f"Spearman={rho:.4f}  inside90={inside:.3f}"
-                )
+                if summary.get("mode") == "auto_group":
+                    agg = summary.get("aggregate", {})
+                    append_log(
+                        f"[VAL] ok={summary['n_ok']}  "
+                        f"pitched_skip={summary['n_skip_pitched']}  "
+                        f"unparseable={summary['n_unparseable']}  "
+                        f"groups={summary['n_groups']}"
+                    )
+                    append_log(
+                        f"[AGG] {agg.get('verdict')}  "
+                        f"medianρ={rho:.4f}  median_inside90={inside:.3f}"
+                    )
+                    msg = (
+                        f"Auto-group done.\n\n"
+                        f"{agg.get('verdict')}\n"
+                        f"PRIMARY median ρ = {rho:.4f}\n"
+                        f"median inside90 = {inside:.3f}\n\n"
+                        f"{summary['report']}"
+                    )
+                else:
+                    append_log(
+                        f"[VAL] files={summary['n_files']}  "
+                        f"Spearman={rho:.4f}  inside90={inside:.3f}"
+                    )
+                    msg = (
+                        f"Done.\n\nSpearman ρ = {rho:.4f}\n"
+                        f"Inside 90% = {inside:.3f}\n\n"
+                        f"{summary['report']}"
+                    )
                 append_log(f"[OUT] {summary['report']}")
                 root.after(
                     0,
                     lambda: (
                         status_var.set("Finished."),
-                        messagebox.showinfo(
-                            "Validate",
-                            f"Done.\n\nSpearman ρ = {rho:.4f}\n"
-                            f"Inside 90% = {inside:.3f}\n\n"
-                            f"{summary['report']}",
-                        ),
+                        messagebox.showinfo("Validate", msg),
                     ),
                 )
             except Exception as exc:
@@ -870,15 +1344,15 @@ def launch_validate_gui() -> None:
     wav_var.trace_add("write", refresh_count)
     refresh_count()
     append_log(
-        "Ready. Browse to a folder of samples "
-        "(.wav / .aif / .flac; subfolders included by default)."
+        "Ready. Auto-group is on by default: parses filenames/folders only "
+        "(never audio→parameters). Tuned Thai gongs are skipped."
     )
     root.mainloop()
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(
-        description="Validate idiophone density model against cymbal WAVs"
+        description="Validate idiophone density model against recordings"
     )
     ap.add_argument(
         "--wav-dir", type=Path, default=None,
@@ -887,6 +1361,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument(
         "--instrument", default="cymbal_46cm_medium",
         choices=sorted(_CATALOGUE),
+        help="manual mode only (ignored with --auto-group)",
     )
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--mc-draws", type=int, default=400)
@@ -894,6 +1369,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument(
         "--no-recursive", action="store_true",
         help="do not search subfolders (top level only)",
+    )
+    ap.add_argument(
+        "--auto-group", action="store_true",
+        help="metadata-only grouping from filenames/folders",
+    )
+    ap.add_argument(
+        "--no-auto-group", action="store_true",
+        help="force single-instrument manual mode",
     )
     ap.add_argument("--gui", action="store_true", help="force GUI")
     ap.add_argument("--cli", action="store_true", help="require CLI (needs --wav-dir)")
@@ -906,6 +1389,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.wav_dir is None:
         ap.error("--wav-dir is required with --cli")
 
+    # CLI default: auto-group on unless --no-auto-group or explicit legacy path
+    auto_group = True
+    if args.no_auto_group:
+        auto_group = False
+    elif args.auto_group:
+        auto_group = True
+
     summary = run_validation(
         args.wav_dir,
         instrument_name=args.instrument,
@@ -913,12 +1403,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mc_draws=args.mc_draws,
         mc_seed=args.mc_seed,
         recursive=not args.no_recursive,
+        auto_group=auto_group,
     )
-    print(
-        f"[VAL] files={summary['n_files']}  "
-        f"Spearman={summary['metrics']['spearman_rho']:.4f}  "
-        f"inside90={summary['metrics']['frac_inside_90']:.3f}"
-    )
+    if summary.get("mode") == "auto_group":
+        agg = summary["aggregate"]
+        print(
+            f"[VAL] ok={summary['n_ok']} pitched_skip={summary['n_skip_pitched']} "
+            f"unparseable={summary['n_unparseable']} groups={summary['n_groups']}"
+        )
+        print(
+            f"[AGG] {agg['verdict']}  "
+            f"median_rho={agg['median_rho']:.4f}  "
+            f"median_inside90={agg['median_inside90']:.4f}"
+        )
+    else:
+        print(
+            f"[VAL] files={summary['n_files']}  "
+            f"Spearman={summary['metrics']['spearman_rho']:.4f}  "
+            f"inside90={summary['metrics']['frac_inside_90']:.3f}"
+        )
     print(f"[OUT] {summary['report']}")
     return 0
 

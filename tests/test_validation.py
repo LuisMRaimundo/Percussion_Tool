@@ -132,6 +132,37 @@ def test_no_writeback_to_source_constants(synthetic_bundle, tmp_path: Path) -> N
     assert before == after
 
 
+def test_auto_group_skips_pitched_and_maps_catalogue(tmp_path: Path) -> None:
+    """Auto-group: catalogue inch match, skip Thai note, mapping in report."""
+    from validate_against_recordings import run_validation_auto
+
+    lib = tmp_path / "Samples" / "Cymbals" / "18crash"
+    lib.mkdir(parents=True)
+    gong = tmp_path / "Samples" / "Gong" / "thaigong.mf"
+    gong.mkdir(parents=True)
+
+    # Minimal valid WAV headers via soundfile
+    sr = 44100
+    y = (0.01 * np.random.default_rng(0).standard_normal(sr)).astype(np.float32)
+    sf.write(str(lib / "18crash.stick.normal.mf.aif"), y, sr, format="AIFF")
+    sf.write(str(gong / "thaigong.A4.mf.aif"), y, sr, format="AIFF")
+
+    summary = run_validation_auto(
+        tmp_path / "Samples",
+        out_dir=tmp_path / "out",
+        mc_draws=20,
+        mc_seed=1,
+    )
+    assert summary["mode"] == "auto_group"
+    assert summary["n_skip_pitched"] == 1
+    assert summary["n_ok"] == 1
+    assert summary["mapping"][0]["catalogue_match"] == "cymbal_18in_medium"
+    assert "exact_catalogue" in summary["mapping"][0]["provenance"]
+    report = Path(summary["report"]).read_text(encoding="utf-8")
+    assert "never** estimated from the" in report or "never" in report.lower()
+    assert "thaigong" in report.lower()
+
+
 def test_find_sample_files_recursive_and_formats(tmp_path: Path) -> None:
     """Discovers nested .wav/.aif; skips __MACOSX and ._ junk; respects flag."""
     root = tmp_path / "lib"

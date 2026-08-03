@@ -8,7 +8,8 @@
 - Added `run_nontunperc.bat` (GUI by default; `--cli` for headless); `run_demo.bat` now forwards to it.
 - Added validation GUI (`validate_against_recordings.py --gui`): browse for sample folder, instrument, report dir; `run_validate.bat` opens GUI by default (`--cli` keeps headless path).
 - Validation sample discovery walks **subfolders by default** (`.wav` / `.aif` / `.aiff` / `.flac`); skips `__MACOSX` and `._*` junk; GUI checkbox + CLI `--no-recursive`.
-- Added `run_validate.bat` Windows launcher (optional folder/instrument/out args).
+- Metadata-only **auto-group** (`sample_metadata.py`, `--auto-group`): group key `(instrument, stroke, dynamic)`; exact inch→catalogue else parametric `filename_metadata + internal_default_thickness`; skip pitched Thai gongs; skip unparseable (no guessing); chinese/splash/ride band-profile only (out of aggregate); `ff` labelled nonlinear-regime probe; circularity refusal stated in report; full file→model mapping table.
+- Added `run_validate.bat` Windows launcher (folder-only ⇒ auto-group; optional catalogue instrument ⇒ manual).
 - Added `uncertainty.py` with `run_monte_carlo` (default N=2000, fixed seed) aggregating p5/p25/p50/p75/p95 for modes, energy weights, and composite indices.
 - Thickness lognormal sigmas set so the 95% span is ±25% (plates) / ±10% (membranes) (`internal_default`: hammering/taper vs membrane film tolerance).
 - Diameter / E,ρ / decay widths taken as 1-σ = 1% / 5% / 20% of nominal (`internal_default` reading of “normal, ±X%”).

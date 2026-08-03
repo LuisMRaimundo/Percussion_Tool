@@ -18,8 +18,11 @@ validation_out/
 
 # Local validation / sample libraries (keep on disk, do not publish)
 wavs/
+Samples/
 Gong/
 Tam-Tam/
+Cymbals/
+validation_out_smoke/
 *.wav
 *.aif
 *.aiff
