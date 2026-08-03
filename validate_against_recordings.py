@@ -570,11 +570,270 @@ def run_validation(
     return summary
 
 
+def launch_validate_gui() -> None:
+    """Desktop UI to pick the WAV sample folder and run validation."""
+    import os
+    import threading
+    import traceback
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, scrolledtext, ttk
+
+    root = tk.Tk()
+    root.title("NonTunPerc — Validate against recordings")
+    root.geometry("720x520")
+    root.minsize(640, 440)
+
+    bg = "#1e2a24"
+    panel = "#2a3a32"
+    accent = "#c4a35a"
+    text = "#f2efe6"
+    muted = "#a8b5ad"
+    root.configure(bg=bg)
+
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+    style.configure("TFrame", background=bg)
+    style.configure("Card.TFrame", background=panel)
+    style.configure("TLabel", background=bg, foreground=text, font=("Segoe UI", 10))
+    style.configure(
+        "Title.TLabel", background=bg, foreground=accent,
+        font=("Georgia", 16, "bold"),
+    )
+    style.configure(
+        "Sub.TLabel", background=bg, foreground=muted, font=("Segoe UI", 9)
+    )
+    style.configure(
+        "Card.TLabel", background=panel, foreground=text, font=("Segoe UI", 10)
+    )
+    style.configure("TButton", font=("Segoe UI", 10), padding=6)
+    style.configure(
+        "Accent.TButton", background=accent, foreground="#1a1510",
+        font=("Segoe UI", 10, "bold"), padding=8,
+    )
+    style.map("Accent.TButton", background=[("active", "#d4b56a")])
+    style.configure("TCombobox", padding=4)
+
+    hdr = ttk.Frame(root)
+    hdr.pack(fill="x", padx=16, pady=(14, 6))
+    ttk.Label(hdr, text="Validate against WAVs", style="Title.TLabel").pack(
+        anchor="w"
+    )
+    ttk.Label(
+        hdr,
+        text="Choose the folder that holds single-stroke cymbal samples "
+        "(.wav). Report is written only — no write-back to source constants.",
+        style="Sub.TLabel",
+    ).pack(anchor="w")
+
+    card = ttk.Frame(root, style="Card.TFrame")
+    card.pack(fill="x", padx=16, pady=8)
+    card.configure(padding=12)
+
+    wav_var = tk.StringVar(value=str(ROOT / "wavs"))
+    out_var = tk.StringVar(value=str(ROOT / "validation_out"))
+    instr_var = tk.StringVar(value="cymbal_46cm_medium")
+    draws_var = tk.StringVar(value="400")
+    status_var = tk.StringVar(value="Select a sample folder, then Run.")
+
+    def browse_wav() -> None:
+        initial = wav_var.get() if Path(wav_var.get()).is_dir() else str(ROOT)
+        d = filedialog.askdirectory(
+            title="Select folder with WAV samples",
+            initialdir=initial,
+        )
+        if d:
+            wav_var.set(d)
+            refresh_count()
+
+    def browse_out() -> None:
+        initial = out_var.get() if Path(out_var.get()).is_dir() else str(ROOT)
+        d = filedialog.askdirectory(
+            title="Select report output folder",
+            initialdir=initial,
+        )
+        if d:
+            out_var.set(d)
+
+    def count_wavs(folder: Path) -> int:
+        if not folder.is_dir():
+            return 0
+        return len({p.resolve() for p in folder.glob("*.wav")} |
+                   {p.resolve() for p in folder.glob("*.WAV")})
+
+    def refresh_count(*_args) -> None:
+        n = count_wavs(Path(wav_var.get()))
+        status_var.set(f"{n} WAV file(s) found in sample folder.")
+
+    row = 0
+    ttk.Label(card, text="Sample folder (WAVs)", style="Card.TLabel").grid(
+        row=row, column=0, sticky="w", pady=4
+    )
+    row += 1
+    wav_row = ttk.Frame(card, style="Card.TFrame")
+    wav_row.grid(row=row, column=0, sticky="ew", pady=2)
+    card.columnconfigure(0, weight=1)
+    tk.Entry(wav_row, textvariable=wav_var, width=56).pack(
+        side="left", fill="x", expand=True
+    )
+    ttk.Button(wav_row, text="Browse…", command=browse_wav).pack(
+        side="left", padx=(6, 0)
+    )
+    row += 1
+
+    ttk.Label(card, text="Instrument model", style="Card.TLabel").grid(
+        row=row, column=0, sticky="w", pady=(10, 2)
+    )
+    row += 1
+    ttk.Combobox(
+        card,
+        textvariable=instr_var,
+        values=sorted(_CATALOGUE),
+        state="readonly",
+        width=40,
+    ).grid(row=row, column=0, sticky="w")
+    row += 1
+
+    ttk.Label(card, text="Report output folder", style="Card.TLabel").grid(
+        row=row, column=0, sticky="w", pady=(10, 2)
+    )
+    row += 1
+    out_row = ttk.Frame(card, style="Card.TFrame")
+    out_row.grid(row=row, column=0, sticky="ew", pady=2)
+    tk.Entry(out_row, textvariable=out_var, width=56).pack(
+        side="left", fill="x", expand=True
+    )
+    ttk.Button(out_row, text="Browse…", command=browse_out).pack(
+        side="left", padx=(6, 0)
+    )
+    row += 1
+
+    ttk.Label(card, text="MC draws (model fan)", style="Card.TLabel").grid(
+        row=row, column=0, sticky="w", pady=(10, 2)
+    )
+    row += 1
+    tk.Spinbox(
+        card, from_=40, to=5000, increment=20, width=10, textvariable=draws_var
+    ).grid(row=row, column=0, sticky="w")
+
+    log_box = scrolledtext.ScrolledText(
+        root,
+        wrap="word",
+        height=14,
+        bg="#121a16",
+        fg=text,
+        insertbackground=text,
+        font=("Consolas", 9),
+        relief="flat",
+    )
+    log_box.pack(fill="both", expand=True, padx=16, pady=(4, 8))
+
+    btn_row = ttk.Frame(root)
+    btn_row.pack(fill="x", padx=16, pady=(0, 12))
+    ttk.Label(btn_row, textvariable=status_var, style="Sub.TLabel").pack(
+        side="left"
+    )
+
+    running = {"flag": False}
+
+    def append_log(msg: str) -> None:
+        root.after(0, lambda: (log_box.insert("end", msg + "\n"), log_box.see("end")))
+
+    def open_report_dir() -> None:
+        folder = Path(out_var.get())
+        folder.mkdir(parents=True, exist_ok=True)
+        os.startfile(str(folder))  # noqa: S606
+
+    def on_run() -> None:
+        if running["flag"]:
+            return
+        wav_dir = Path(wav_var.get())
+        if not wav_dir.is_dir():
+            messagebox.showwarning(
+                "Validate", f"Sample folder not found:\n{wav_dir}"
+            )
+            return
+        n = count_wavs(wav_dir)
+        if n == 0:
+            messagebox.showwarning(
+                "Validate", f"No .wav files found in:\n{wav_dir}"
+            )
+            return
+        running["flag"] = True
+        run_btn.state(["disabled"])
+        status_var.set("Running validation…")
+        append_log(f"=== Validation start ===")
+        append_log(f"WAV dir   : {wav_dir}")
+        append_log(f"Instrument: {instr_var.get()}")
+        append_log(f"Out dir   : {out_var.get()}")
+        append_log(f"Files     : {n}")
+
+        def worker() -> None:
+            try:
+                summary = run_validation(
+                    wav_dir,
+                    instrument_name=instr_var.get(),
+                    out_dir=Path(out_var.get()),
+                    mc_draws=int(draws_var.get()),
+                )
+                rho = summary["metrics"]["spearman_rho"]
+                inside = summary["metrics"]["frac_inside_90"]
+                append_log(
+                    f"[VAL] files={summary['n_files']}  "
+                    f"Spearman={rho:.4f}  inside90={inside:.3f}"
+                )
+                append_log(f"[OUT] {summary['report']}")
+                root.after(
+                    0,
+                    lambda: (
+                        status_var.set("Finished."),
+                        messagebox.showinfo(
+                            "Validate",
+                            f"Done.\n\nSpearman ρ = {rho:.4f}\n"
+                            f"Inside 90% = {inside:.3f}\n\n"
+                            f"{summary['report']}",
+                        ),
+                    ),
+                )
+            except Exception as exc:
+                append_log(traceback.format_exc())
+                root.after(
+                    0,
+                    lambda: (
+                        status_var.set("Failed."),
+                        messagebox.showerror("Validate", str(exc)),
+                    ),
+                )
+            finally:
+                running["flag"] = False
+                root.after(0, lambda: run_btn.state(["!disabled"]))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    run_btn = ttk.Button(
+        btn_row, text="Run validation", style="Accent.TButton", command=on_run
+    )
+    run_btn.pack(side="right", padx=(6, 0))
+    ttk.Button(btn_row, text="Open report folder", command=open_report_dir).pack(
+        side="right"
+    )
+
+    wav_var.trace_add("write", refresh_count)
+    refresh_count()
+    append_log("Ready. Browse to the folder containing your sample WAVs.")
+    root.mainloop()
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(
         description="Validate idiophone density model against cymbal WAVs"
     )
-    ap.add_argument("--wav-dir", type=Path, required=True)
+    ap.add_argument(
+        "--wav-dir", type=Path, default=None,
+        help="folder of WAV samples (omit to open the GUI)",
+    )
     ap.add_argument(
         "--instrument", default="cymbal_46cm_medium",
         choices=sorted(_CATALOGUE),
@@ -582,7 +841,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--mc-draws", type=int, default=400)
     ap.add_argument("--mc-seed", type=int, default=DEFAULT_SEED)
+    ap.add_argument("--gui", action="store_true", help="force GUI")
+    ap.add_argument("--cli", action="store_true", help="require CLI (needs --wav-dir)")
     args = ap.parse_args(argv)
+
+    if args.gui or (args.wav_dir is None and not args.cli):
+        launch_validate_gui()
+        return 0
+
+    if args.wav_dir is None:
+        ap.error("--wav-dir is required with --cli")
+
     summary = run_validation(
         args.wav_dir,
         instrument_name=args.instrument,

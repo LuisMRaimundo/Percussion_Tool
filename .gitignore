@@ -16,9 +16,16 @@ size_sweep.png
 calibration_report.md
 validation_out/
 
-# Local WAV validation inputs
+# Local validation / sample libraries (keep on disk, do not publish)
 wavs/
+Gong/
+Tam-Tam/
 *.wav
+*.aif
+*.aiff
+*.flac
+__MACOSX/
+._*
 
 # Copyrighted / bulky primary-source PDFs (keep locally; not published)
 *.pdf

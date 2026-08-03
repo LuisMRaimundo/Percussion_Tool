@@ -6,6 +6,7 @@
 - Cleared regenerable outputs (`density_profiles*.csv/png`, MC fan, `size_sweep.png`, `calibration_report.md`) and `__pycache__` / `.pytest_cache`; re-create via NonTunPerc. Kept PDFs, `data/`, and source code.
 - Renamed user-facing app to **NonTunPerc** (`nontunperc.py`): tkinter GUI (stages, instruments, MC draws/seed, output folder) plus `--cli` headless pipeline; `demo.py` kept as thin compatibility wrapper.
 - Added `run_nontunperc.bat` (GUI by default; `--cli` for headless); `run_demo.bat` now forwards to it.
+- Added validation GUI (`validate_against_recordings.py --gui`): browse for WAV sample folder, instrument, report dir; `run_validate.bat` opens GUI by default (`--cli` keeps headless path).
 - Added `run_validate.bat` Windows launcher (WAV validation with optional folder/instrument/out args, default `wavs\`).
 - Added `uncertainty.py` with `run_monte_carlo` (default N=2000, fixed seed) aggregating p5/p25/p50/p75/p95 for modes, energy weights, and composite indices.
 - Thickness lognormal sigmas set so the 95% span is ±25% (plates) / ±10% (membranes) (`internal_default`: hammering/taper vs membrane film tolerance).
