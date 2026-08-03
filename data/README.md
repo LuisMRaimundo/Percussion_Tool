@@ -18,6 +18,12 @@ primary:
    in Sivian et al. (1931); only the soft average pressure (0.52 bars at
    3 ft) is textual. Full band levels require another source or human
    figure work if a different edition contains them.
+4. **Fletcher & Rossing Table 18.5 — batter-only / single-head column:**
+   prose (book p. 513) states that removing the carry head changes modal
+   frequencies but little from the carry-lower column; **no separate
+   tabulated single-head frequencies** are printed. Six
+   `fr_ch18_bassdrum_mode` / `specimen=batter_only` rows are blank with
+   `needs_manual_reading=1` (do not invent values).
 
 Blank cells for **15 in. thick** cymbal `p2` / `c2` / `m_c` are blank in
 the printed Rossing Table 9.1 (not illegible) and are *not* flagged.
@@ -34,6 +40,20 @@ the printed Rossing Table 9.1 (not illegible) and are *not* flagged.
 - **Meyer (2009)**: text-layer SPL / sound-power-level statements for the
   same instrument set. Where Meyer and Sivian disagree above ~5 kHz,
   Meyer is preferred and `discrepancy_db` records the correction.
+- **Fletcher & Rossing (1998) Ch. 18 — concert bass drum modes:**
+  Table 18.5 (location tag `Ch18_Table18.5_pp512-513`; measurement year
+  1987 via Rossing, reprinted in FR 1998). Instrument key
+  `bassdrum_82cm` records the **printed 82 cm** diameter — not equated
+  with the catalogue 32-in entry. Columns digitized:
+  - `specimen=both_heads` — carry-head lower tension (orchestral /
+    preferred anchor default): (01)=39, (11)=80, (21)=121, (31)=162,
+    (41)=204, (51)=248 Hz.
+  - `specimen=both_heads_equal` — heads at same tension, including
+    doublet members tagged `mode_freq_*b` where printed.
+  - `specimen=batter_only` — blank / `needs_manual_reading=1` (see list
+    item 4 above).
+  Head thickness in FR prose: 0.010 in Mylar (used as catalogue thickness
+  for the 82 cm entry). Model loader default specimen: `both_heads`.
 
 ## Mapping note (used by `AmplitudeLayer`)
 
@@ -58,6 +78,12 @@ Suspended-cymbal model entries (`cymbal_16in_thin`, `cymbal_18in_medium`,
 is an approximation labelled `internal_default` (see the
 `peak_power_whole` notes cell for `cymbals_15in`).
 
+`bassdrum_82cm` has **no** Sivian AmplitudeLayer alias (modes-only
+anchor). `bassdrum_32in` / `bassdrum_28in` keep their existing Sivian
+keys; they inherit the fitted effective wave speed from the 82 cm
+anchor (`f ∝ 1/a` at fixed `c`, `internal_default`) rather than copying
+measured frequencies.
+
 ### Provenance label correction (values unchanged)
 
 The four `meyer_hf_discrepancy` rows were re-labelled from
@@ -65,10 +91,16 @@ The four `meyer_hf_discrepancy` rows were re-labelled from
 state the offsets are conservative estimates, not figure readings. **No
 numeric values were changed.**
 
-### Calibration bridge (v0.3.2)
+### Calibration bridge (v0.3.2+)
 
 Until the `needs_manual_reading` histogram cells above are completed,
 the scale-commensurability bridge typically has fewer than two surviving
 instruments and reports **NO CALIBRATION ACHIEVED** (factor undefined).
 The model side of the bridge is theory-only (partials); it does not reuse
 AmplitudeLayer measured weights.
+
+### Membrane mode anchor (v0.3.3)
+
+`fr_ch18_bassdrum_mode` rows feed `MembraneInstrument.measured_modes`
+(`both_heads` default). They are **modal frequencies**, not
+AmplitudeLayer band powers. See README §2.2 and TECHNICAL_MANUAL §5.1.

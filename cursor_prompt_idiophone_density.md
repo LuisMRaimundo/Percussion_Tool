@@ -1,4 +1,4 @@
-# Normative build specification (v0.3.2)
+# Normative build specification (v0.3.3)
 
 In-repo checklist aligned with current `README.md`, `model.py`, and
 `tests/`. Do not treat this file as a primary source for physical
@@ -20,7 +20,10 @@ is equal-density (∝ bandwidth), not equal energy per band.
 - Plate asymptotic density: `n(f) = √3 · A / (c_L · h)` [Cremer et al.]
 - Chladni: `f = c (m + b n)^p` with Table 9.1 / Fig. 9.3 anchors
 - Plate scaling fallback: `f ∝ h / d²`
-- Membrane: `f_mk = β_mk c / (2π a)`, `n(f) = 2π A f / c²`
+- Membrane: `f_mk = β_mk c / (2π a)`, `n(f) = 2π A f / c²`;
+  optional FR Table 18.5 `measured_modes` override low modes;
+  `c_eff` LS-fit (`derived`); siblings scale `f ∝ 1/a` at fixed `c`
+  (`internal_default`)
 - Decay plates: `τ(f) = τ_1k (f/1 kHz)^−α`, `τ_1k≈10 s`, `α≈0.84`
 - Phase windows (plates): strike 0–20 ms; buildup 20–150 ms;
   shimmer 0.15–2 s; residue 2–6 s
@@ -30,6 +33,7 @@ is equal-density (∝ bandwidth), not equal energy per band.
 
 - **VAL1:** 46 cm cymbal ≈ 64 modes/kHz; >100 modes below 2 kHz
 - **VAL2:** anchored n=0 family reproduces Fig. 9.3 to ~0%
+- **VAL3:** bassdrum_82cm anchored modes reproduce FR Table 18.5; in-vacuo bias documented for lowest modes
 - Recording validation: metadata-only auto-group; never fit parameters
   from audio; no write-back to `primary_source` rows
 - Calibration bridge: model index = theory partials + equal energy per
@@ -39,7 +43,7 @@ is equal-density (∝ bandwidth), not equal energy per band.
 ## Export schema (minimum columns)
 
 `instrument, family, band_index, f_lo_hz, f_hi_hz, f_centre_hz,
-modes_per_band, energy_w_<phase>, energy_provenance, fill_fraction`
+modes_per_band, energy_w_<phase>, energy_provenance, fill_fraction, notes`
 
 ## Sanity assertions (tests)
 
@@ -51,4 +55,4 @@ modes_per_band, energy_w_<phase>, energy_provenance, fill_fraction`
 - High fill_fraction refuses AmplitudeLayer (`internal_default`)
 - Equal-density residual: narrow uncovered band gets less energy than wide
 - Calibration excludes instruments with fewer than 2 measured bands
-- VAL1 / VAL2 as above
+- VAL1 / VAL2 / VAL3 as above

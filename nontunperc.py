@@ -34,7 +34,10 @@ from model import (
     AmplitudeLayer,
     MembraneInstrument,
     PlateInstrument,
+    fit_effective_wave_speed,
     generate_profile,
+    make_bassdrum_catalogue,
+    membrane_beta,
 )
 from calibration import format_calibration_cli_line, write_calibration_report
 from uncertainty import (
@@ -52,8 +55,8 @@ LogFn = Callable[[str], None]
 
 
 def default_instruments() -> List:
-    """Canonical instrument set (Chladni anchors from Rossing Table 9.1 / Fig. 9.3)."""
-    return [
+    """Canonical instrument set (Chladni / FR Ch.18 membrane anchors)."""
+    plates = [
         PlateInstrument(
             "cymbal_16in_thin", 0.406, 0.0008, chladni=(10.8, 2.0, 1.81)
         ),
@@ -65,9 +68,8 @@ def default_instruments() -> List:
         ),
         PlateInstrument("gong_50cm_bronze", 0.500, 0.0020),
         PlateInstrument("tamtam_80cm_bronze", 0.800, 0.0015),
-        MembraneInstrument("bassdrum_32in", 0.813, f11_nominal=60.0),
-        MembraneInstrument("bassdrum_28in", 0.711, f11_nominal=72.0),
     ]
+    return plates + make_bassdrum_catalogue(ROOT / "data" / "source_constants.csv")
 
 
 @dataclass
@@ -117,7 +119,7 @@ def run_pipeline(
     )
     summary: dict = {"outputs": [], "instruments": [i.name for i in instruments]}
 
-    # ---- VAL1 / VAL2 -------------------------------------------------
+    # ---- VAL1 / VAL2 / VAL3 ------------------------------------------
     if opt.run_validation:
         cy = next(
             (i for i in all_instr if i.name == "cymbal_46cm_medium"),
@@ -145,6 +147,81 @@ def run_pipeline(
             )
             summary["val1_modes_per_khz"] = float(nd * 1000)
             summary["val2_error_pct"] = float(err)
+
+        drum = next(
+            (i for i in all_instr if isinstance(i, MembraneInstrument)
+             and i.has_measured_anchor()),
+            None,
+        )
+        if drum is not None:
+            meas = np.asarray(drum.measured_modes, dtype=float)
+            labels = drum.measured_mode_indices or tuple()
+            anchored = drum.low_modes()[: len(meas)]
+            # VAL3a: anchored low modes reproduce measured values exactly
+            max_err = float(np.max(np.abs(anchored - meas)))
+            _log(
+                f"[VAL3] {drum.name}: anchored modes reproduce FR Table 18.5 "
+                f"exactly (max |df| = {max_err:.3e} Hz); "
+                f"fitted c = {drum.fitted_effective_c():.3f} m/s",
+                log,
+            )
+            # In-vacuo comparison: wave speed from higher modes (m ≥ 2),
+            # where air loading is weaker; predict all labels with that c.
+            # Expected: vacuo overestimates the air-loading-dominated
+            # lowest modes ((0,1), (1,1)).
+            hi_f = [
+                float(f)
+                for (m_i, n_i), f in zip(labels, meas)
+                if m_i >= 2
+            ]
+            hi_lab = tuple(
+                (m_i, n_i) for (m_i, n_i) in labels if m_i >= 2
+            )
+            c_vac = fit_effective_wave_speed(
+                np.asarray(hi_f), hi_lab, drum.radius
+            )
+            _log(
+                "[VAL3] mode   measured   in_vacuo   pct_dev "
+                "(+ = vacuo overestimates; c from m>=2)",
+                log,
+            )
+            rows_val3 = []
+            low_ok = True
+            for (m_i, n_i), f_m in zip(labels, meas):
+                beta = membrane_beta(m_i, n_i)
+                f_v = beta * c_vac / (2.0 * np.pi * drum.radius)
+                pct = 100.0 * (f_v - f_m) / f_m
+                if m_i <= 1 and pct <= 0:
+                    low_ok = False
+                _log(
+                    f"[VAL3] ({m_i}{n_i})  {f_m:8.2f}  {f_v:8.2f}  "
+                    f"{pct:+7.2f}%",
+                    log,
+                )
+                rows_val3.append(
+                    {
+                        "mode": f"{m_i}{n_i}",
+                        "measured_hz": float(f_m),
+                        "in_vacuo_hz": float(f_v),
+                        "pct_dev": float(pct),
+                    }
+                )
+            if low_ok:
+                _log(
+                    "[VAL3] in-vacuo > measured for air-loading-dominated "
+                    "lowest modes (0,1) and (1,1) - expected direction",
+                    log,
+                )
+            else:
+                _log(
+                    "[VAL3] WARNING: in-vacuo not above measured for "
+                    "lowest modes (0,1)/(1,1)",
+                    log,
+                )
+            summary["val3_max_abs_err_hz"] = max_err
+            summary["val3_fitted_c"] = float(drum.fitted_effective_c() or 0.0)
+            summary["val3_c_vacuo_from_mge2"] = float(c_vac)
+            summary["val3_rows"] = rows_val3
 
     profiles = []
     if opt.run_profiles or opt.run_plots:
@@ -391,7 +468,7 @@ def launch_gui() -> None:
     var_amp = tk.BooleanVar(value=True)
 
     for text_, var in (
-        ("VAL1 / VAL2 checks", var_val),
+        ("VAL1 / VAL2 / VAL3 checks", var_val),
         ("Density profiles (CSV)", var_prof),
         ("Plots (PNG)", var_plots),
         ("Calibration bridge", var_cal),

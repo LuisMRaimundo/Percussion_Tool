@@ -1,7 +1,7 @@
 # NonTunPerc — Quick reference
 
 One-page guide to the GUI options, outputs, and everyday use.
-Version **0.3.2**.
+Version **0.3.3**.
 
 ---
 
@@ -29,7 +29,7 @@ From physical parameters (size, thickness/tension, material), NonTunPerc predict
 
 | Option | Meaning |
 |---|---|
-| **VAL1 / VAL2 checks** | Sanity checks on the 46 cm cymbal: modal density ≈ 64 modes/kHz (VAL1); Chladni fit reproduces Rossing Fig. 9.3 (VAL2). |
+| **VAL1 / VAL2 / VAL3 checks** | VAL1/VAL2: 46 cm cymbal modal density and Chladni fit. VAL3: `bassdrum_82cm` reproduces FR Table 18.5; prints in-vacuo bias table. |
 | **Density profiles (CSV)** | Writes `density_profiles.csv`: one row per instrument × ERB band with mode counts, relative energy weights, `energy_provenance`, `fill_fraction`. |
 | **Plots (PNG)** | Writes `density_profiles.png` (modes + phase energies) and `size_sweep.png` (index vs cymbal diameter). |
 | **Calibration bridge** | Theory-side partials vs measured-bands-only empirical index → `calibration_report.md`. Needs >=2 survivors; otherwise **NO CALIBRATION ACHIEVED**. |
@@ -59,8 +59,9 @@ Higher draws → smoother intervals, longer runtime.
 | `cymbal_46cm_medium` | plate | Fig. 9.3 anchor; main validation / fan-chart target; AmplitudeLayer **refuses** |
 | `gong_50cm_bronze` | plate | Scaled (no Table 9.1 row); no Sivian alias |
 | `tamtam_80cm_bronze` | plate | Scaled; no Sivian alias |
-| `bassdrum_32in` | membrane | May accept `mixed_primary_and_fill` (fill ≈ 0.59) |
-| `bassdrum_28in` | membrane | Currently refuses (fill ≈ 0.87) |
+| `bassdrum_82cm` | membrane | FR Table 18.5 measured-mode anchor (both heads); no Sivian alias |
+| `bassdrum_32in` | membrane | Fitted `c` from 82 cm + own diameter; may accept mixed fill ≈ 0.59 |
+| `bassdrum_28in` | membrane | Fitted `c` from 82 cm + own diameter; currently refuses (fill ≈ 0.87) |
 
 Uncheck instruments you do not need to speed up the run.
 
@@ -131,10 +132,12 @@ Membranes use only **strike** / **decay**.
 
 1. Flat-plate / single-membrane idealisations  
 2. Linear regime only (not chaotic ff crashes)  
-3. Equipartition at strike unless AmplitudeLayer **accepts** coverage (fill ≤ 0.60)  
-4. Absolute 1931 levels weak above ~5 kHz (Meyer corrections = `literature_derived`)  
-5. Absolute levels = single specimens, not variance (variance → MC layer)  
-6. Cymbal model names → Sivian clash PAIR alias (`internal_default`)  
-7. Calibration factor provisional until `needs_manual_reading` cells are filled  
+3. Membrane in-vacuo bias: with FR Table 18.5 anchor, only **above** the
+   measured range; without anchor, lowest modes overestimated  
+4. Equipartition at strike unless AmplitudeLayer **accepts** coverage (fill ≤ 0.60)  
+5. Absolute 1931 levels weak above ~5 kHz (Meyer corrections = `literature_derived`)  
+6. Absolute levels = single specimens, not variance (variance → MC layer)  
+7. Cymbal model names → Sivian clash PAIR alias (`internal_default`)  
+8. Calibration factor provisional until `needs_manual_reading` cells are filled  
 
 Full equations and file map: see **TECHNICAL_MANUAL.md**.

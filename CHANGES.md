@@ -1,5 +1,42 @@
 # CHANGES
 
+## v0.3.3 — Membrane measured-mode anchor (Fletcher & Rossing Ch. 18)
+
+- Digitized Fletcher & Rossing (1998) Table 18.5 concert bass-drum modes
+  into `data/source_constants.csv` as `fr_ch18_bassdrum_mode` /
+  `bassdrum_82cm` (`primary_source`). Default specimen `both_heads`
+  (carry-head lower): 39, 80, 121, 162, 204, 248 Hz for (01)…(51).
+  Equal-tension doublets recorded under `both_heads_equal`;
+  `batter_only` left blank with `needs_manual_reading=1`. **No existing
+  `primary_source` numeric value was altered.**
+- `MembraneInstrument.measured_modes` + `measured_modes_from_csv` /
+  `make_bassdrum_catalogue`: 82 cm entry carries the anchor; 32-in /
+  28-in reuse fitted effective `c` with own diameter (`f ∝ 1/a`,
+  `internal_default`). Fitted `c_eff = 67.036 m/s` (derived) from the
+  both-heads set.
+- `low_modes()` returns measured frequencies then Bessel theory above
+  the highest measured mode (air-loading / two-head effects absorbed at
+  low order, Chladni-analogue).
+- **VAL3** in CLI / tests: anchored modes reproduce Table 18.5 exactly;
+  in-vacuo (`c` from m>=2 = 68.725 m/s) vs measured side-by-side:
+
+  | mode | measured [Hz] | in-vacuo [Hz] | pct_dev |
+  |---|---:|---:|---:|
+  | (01) | 39 | 64.16 | +64.50% |
+  | (11) | 80 | 102.22 | +27.78% |
+  | (21) | 121 | 137.01 | +13.23% |
+  | (31) | 162 | 170.21 | +5.07% |
+  | (41) | 204 | 202.44 | -0.76% |
+  | (51) | 248 | 234.00 | -5.64% |
+
+- Graceful fallback: with no usable measured rows, catalogue is
+  bit-identical to the v0.3.1 `f11_nominal` path.
+- Docs synced to **0.3.3**: README (§2.2, VAL3, validity limit 3, `notes`
+  export); TECHNICAL_MANUAL (§5.1, API, packaging); QUICK_REFERENCE
+  (instruments, VAL3, validity); `data/README.md` Ch. 18 extraction +
+  `needs_manual_reading` batter-only; `cursor_prompt_idiophone_density.md`.
+  Package version → `0.3.3`.
+
 ## v0.3.2 — Calibration bridge: independent theory side + no-factor verdict
 
 - If fewer than 2 bridge instruments survive exclusion, the conversion

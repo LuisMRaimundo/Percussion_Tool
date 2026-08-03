@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -200,15 +200,111 @@ class PlateInstrument:
 # 4. Membrane model (bass drum)
 # ----------------------------------------------------------------------
 
+_MODE_FREQ_PARAM_RE = None  # compiled lazily
+
+
+def _mode_freq_param_re():
+    import re
+    global _MODE_FREQ_PARAM_RE
+    if _MODE_FREQ_PARAM_RE is None:
+        # mode_freq_01, mode_freq_11b, …
+        _MODE_FREQ_PARAM_RE = re.compile(
+            r"^mode_freq_(\d)(\d)([a-z]?)$", re.I
+        )
+    return _MODE_FREQ_PARAM_RE
+
+
+def membrane_beta(m: int, n: int) -> float:
+    """Bessel zero β_mn: n-th zero of J_m (n ≥ 1)."""
+    if n < 1:
+        raise ValueError("radial index n must be >= 1")
+    return float(jn_zeros(m, n)[n - 1])
+
+
+def fit_effective_wave_speed(
+    freqs_hz: np.ndarray,
+    mode_indices: Sequence[Tuple[int, int]],
+    radius_m: float,
+) -> float:
+    """Least-squares fit of f = β c / (2π a) → effective c [m/s] (derived).
+
+    Absorbs air-loading and two-head coupling into an effective wave speed
+    for the anchored low-mode set, analogous to the Chladni anchor for
+    plates (low-order only).
+    """
+    f = np.asarray(freqs_hz, dtype=float)
+    betas = np.array(
+        [membrane_beta(m, n) for m, n in mode_indices], dtype=float
+    )
+    if f.size == 0 or f.size != betas.size:
+        raise ValueError("freqs and mode_indices length mismatch")
+    # f = β * c / (2πa)  ⇒  c = 2πa * (Σ β f) / (Σ β²)
+    c = (
+        2.0
+        * np.pi
+        * radius_m
+        * float(np.dot(betas, f) / np.dot(betas, betas))
+    )
+    return float(c)
+
+
+def measured_modes_from_csv(
+    instrument_key: str,
+    specimen: str = "both_heads",
+    csv_path: Optional[Path] = None,
+) -> Tuple[np.ndarray, Tuple[Tuple[int, int], ...]]:
+    """Load Fletcher & Rossing Ch. 18 measured bass-drum modes from CSV.
+
+    Skips ``needs_manual_reading=1`` and blank ``value_si``. Returns
+    frequencies sorted ascending with aligned ``(m, n)`` labels. Doublet
+    suffixes (e.g. ``mode_freq_01b``) are included when present.
+    """
+    path = (
+        Path(csv_path)
+        if csv_path is not None
+        else Path(__file__).resolve().parent / "data" / "source_constants.csv"
+    )
+    df = pd.read_csv(path)
+    sub = df[
+        (df["record_type"] == "fr_ch18_bassdrum_mode")
+        & (df["instrument"] == instrument_key)
+        & (df["specimen"] == specimen)
+        & (df["needs_manual_reading"] != 1)
+        & df["value_si"].notna()
+    ]
+    if len(sub) == 0:
+        return np.array([], dtype=float), tuple()
+
+    rx = _mode_freq_param_re()
+    pairs: List[Tuple[float, int, int]] = []
+    for _, row in sub.iterrows():
+        mobj = rx.match(str(row["parameter"]))
+        if not mobj:
+            continue
+        m_i, n_i = int(mobj.group(1)), int(mobj.group(2))
+        pairs.append((float(row["value_si"]), m_i, n_i))
+    pairs.sort(key=lambda t: t[0])
+    freqs = np.array([p[0] for p in pairs], dtype=float)
+    labels = tuple((p[1], p[2]) for p in pairs)
+    return freqs, labels
+
+
 @dataclass
 class MembraneInstrument:
     """
     Circular membrane. First-order model of a bass drum batter head.
 
-    Air loading (which lowers the lowest modes by up to tens of percent)
-    and two-head coupling [FR Ch. 18] are NOT modelled; both are flagged
-    as validity limits. Either tension or a nominal principal frequency
-    f11_nominal may be supplied; if the latter, tension is inferred.
+    Without ``measured_modes``, air loading and two-head coupling
+    [FR Ch. 18] are NOT modelled (lowest modes overestimated) — flagged
+    as a validity limit. Optional Fletcher & Rossing measured modes
+    override the lowest theoretical frequencies (``primary_source``
+    anchor); theory continues above with a least-squares fitted effective
+    wave speed ``c`` (``derived``), absorbing air-loading / two-head
+    effects at low order exactly as the Chladni anchor absorbs curvature
+    for plates.
+
+    Either tension, ``f11_nominal``, or ``effective_c`` may set the wave
+    speed when no measured-mode fit is active.
     """
     name: str
     diameter: float                   # [m]
@@ -218,6 +314,9 @@ class MembraneInstrument:
     membrane_rho: Optional[float] = None  # None => MYLAR_RHO (MC hook)
     decay_tau_100: float = 0.8
     decay_alpha: float = 1.2
+    measured_modes: Optional[np.ndarray] = None  # Hz, sorted
+    measured_mode_indices: Optional[Tuple[Tuple[int, int], ...]] = None
+    effective_c: Optional[float] = None  # [m/s], derived when fitted
 
     @property
     def sigma(self) -> float:
@@ -229,7 +328,30 @@ class MembraneInstrument:
     def radius(self) -> float:
         return self.diameter / 2.0
 
+    def has_measured_anchor(self) -> bool:
+        return (
+            self.measured_modes is not None
+            and len(self.measured_modes) > 0
+            and self.measured_mode_indices is not None
+            and len(self.measured_mode_indices) == len(self.measured_modes)
+        )
+
+    def fitted_effective_c(self) -> Optional[float]:
+        """LS-squares effective c from measured modes, or stored value."""
+        if self.effective_c is not None:
+            return float(self.effective_c)
+        if not self.has_measured_anchor():
+            return None
+        return fit_effective_wave_speed(
+            self.measured_modes,  # type: ignore[arg-type]
+            self.measured_mode_indices,  # type: ignore[arg-type]
+            self.radius,
+        )
+
     def wave_speed(self) -> float:
+        c_fit = self.fitted_effective_c()
+        if c_fit is not None:
+            return float(c_fit)
         if self.tension is not None:
             T = self.tension
         elif self.f11_nominal is not None:
@@ -240,8 +362,51 @@ class MembraneInstrument:
             T = 700.0                            # internal_default [N/m]
         return float(np.sqrt(T / self.sigma))
 
+    def theoretical_modes_in_vacuo(
+        self, m_max: int = 10, k_max: int = 8
+    ) -> np.ndarray:
+        """In-vacuo Bessel modes using tension / f11_nominal / default T.
+
+        Ignores ``measured_modes`` and ``effective_c`` so VAL3 can compare
+        the unanchored theory against the Fletcher & Rossing measurements.
+        """
+        if self.tension is not None:
+            c = float(np.sqrt(self.tension / self.sigma))
+        elif self.f11_nominal is not None:
+            beta11 = jn_zeros(1, 1)[0]
+            c = 2.0 * np.pi * self.radius * self.f11_nominal / beta11
+        else:
+            c = float(np.sqrt(700.0 / self.sigma))
+        a = self.radius
+        freqs = []
+        for m in range(0, m_max + 1):
+            for beta in jn_zeros(m, k_max):
+                freqs.append(beta * c / (2.0 * np.pi * a))
+        return np.sort(np.asarray(freqs, dtype=float))
+
     def low_modes(self, m_max: int = 10, k_max: int = 8) -> np.ndarray:
-        """f_mk = beta_mk * c / (2*pi*a), beta_mk = k-th zero of J_m [FR]."""
+        """Modal frequencies [Hz].
+
+        With measured anchor: return primary_source measured modes, then
+        append theoretical Bessel modes **above** the highest measured
+        frequency using the fitted effective wave speed (derived). This
+        absorbs air-loading / two-head effects into the low modes only.
+        Without anchor: classical ``f_mk = β_mk c / (2π a)`` [FR].
+        """
+        if self.has_measured_anchor():
+            measured = np.sort(np.asarray(self.measured_modes, dtype=float))
+            f_max = float(measured[-1])
+            c, a = self.wave_speed(), self.radius
+            theo: List[float] = []
+            for m in range(0, m_max + 1):
+                for beta in jn_zeros(m, k_max):
+                    f = float(beta * c / (2.0 * np.pi * a))
+                    if f > f_max:
+                        theo.append(f)
+            if theo:
+                return np.sort(np.concatenate([measured, np.asarray(theo)]))
+            return measured
+
         c, a = self.wave_speed(), self.radius
         freqs = []
         for m in range(0, m_max + 1):
@@ -266,6 +431,53 @@ class MembraneInstrument:
         t0 = self.decay_tau_100 if tau_100 is None else tau_100
         al = self.decay_alpha if alpha is None else alpha
         return t0 * (f / 100.0) ** (-al)
+
+
+def make_bassdrum_catalogue(
+    csv_path: Optional[Path] = None,
+) -> List["MembraneInstrument"]:
+    """Build bass-drum catalogue: 82 cm anchored + scaled siblings.
+
+    The Fletcher & Rossing Table 18.5 drum is 82 cm; that entry carries
+    the measured-mode anchor. Catalogue 32-in / 28-in drums use the
+    **fitted effective c** from the 82 cm set with their own diameter
+    (``f ∝ 1/a`` at fixed effective c — ``internal_default`` scaling;
+    frequencies are not copied across sizes).
+    """
+    path = csv_path
+    freqs, labels = measured_modes_from_csv(
+        "bassdrum_82cm", specimen="both_heads", csv_path=path
+    )
+    d82 = 0.82
+    if len(freqs) == 0:
+        # Graceful fallback: legacy f11_nominal instruments only.
+        return [
+            MembraneInstrument("bassdrum_32in", 0.813, f11_nominal=60.0),
+            MembraneInstrument("bassdrum_28in", 0.711, f11_nominal=72.0),
+        ]
+    c_eff = fit_effective_wave_speed(freqs, labels, d82 / 2.0)
+    anchored = MembraneInstrument(
+        name="bassdrum_82cm",
+        diameter=d82,
+        membrane_thickness=0.25e-3,  # 0.010 in Mylar [FR Ch.18 prose]
+        measured_modes=freqs,
+        measured_mode_indices=labels,
+        effective_c=c_eff,
+    )
+    # Sibling sizes: same effective c, own diameter (internal_default).
+    siblings = [
+        MembraneInstrument(
+            "bassdrum_32in",
+            0.813,
+            effective_c=c_eff,
+        ),
+        MembraneInstrument(
+            "bassdrum_28in",
+            0.711,
+            effective_c=c_eff,
+        ),
+    ]
+    return [anchored] + siblings
 
 
 # ----------------------------------------------------------------------
@@ -645,6 +857,7 @@ class DensityProfile:
         return float(np.exp(H) * mean_occ) ** 0.5  # geometric compromise
 
     def to_rows(self) -> List[dict]:
+        note_str = " | ".join(self.notes) if self.notes else ""
         rows = []
         for i, fc in enumerate(self.band_centres):
             row = {
@@ -660,6 +873,7 @@ class DensityProfile:
                 if self.ref_distance_m is not None else "",
                 "fill_fraction": self.fill_fraction
                 if self.fill_fraction is not None else "",
+                "notes": note_str,
             }
             for ph, w in self.energy_weights.items():
                 row[f"energy_w_{ph}"] = w[i]
@@ -687,10 +901,27 @@ def generate_profile(
         ]
     else:
         family, phases = "membrane", MEMBRANE_PHASES
-        notes = [
-            "single membrane in vacuo: air loading and 2-head coupling "
-            "not modelled (lowest modes overestimated)",
-        ]
+        if isinstance(instr, MembraneInstrument) and instr.has_measured_anchor():
+            c_eff = instr.fitted_effective_c()
+            n_anch = len(instr.measured_modes)  # type: ignore[arg-type]
+            notes = [
+                f"measured-mode anchor active (Fletcher & Rossing 1998 "
+                f"Table 18.5): {n_anch} modes, primary_source; "
+                f"fitted effective c = {c_eff:.3f} m/s (derived); "
+                f"air-loading / two-head effects absorbed at low order only",
+            ]
+        elif isinstance(instr, MembraneInstrument) and instr.effective_c is not None:
+            notes = [
+                f"effective wave speed c = {instr.effective_c:.3f} m/s "
+                f"scaled from 82 cm Fletcher & Rossing anchor "
+                f"(f ∝ 1/a at fixed c; internal_default); "
+                f"in-vacuo bias applies above any local measured range",
+            ]
+        else:
+            notes = [
+                "single membrane in vacuo: air loading and 2-head coupling "
+                "not modelled (lowest modes overestimated)",
+            ]
 
     e0 = None
     provenance = "internal_default"

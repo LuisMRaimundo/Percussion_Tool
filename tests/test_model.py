@@ -15,8 +15,12 @@ from model import (
     PlateInstrument,
     erb_band_edges,
     erb_bandwidth,
+    fit_effective_wave_speed,
     generate_profile,
     energy_preserving_remap,
+    make_bassdrum_catalogue,
+    measured_modes_from_csv,
+    membrane_beta,
 )
 from calibration import run_calibration, write_calibration_report
 
@@ -386,3 +390,81 @@ def test_meyer_hf_provenance_is_literature_derived() -> None:
     meyer = df[df["record_type"] == "meyer_hf_discrepancy"]
     assert len(meyer) == 4
     assert set(meyer["provenance"]) == {"literature_derived"}
+
+
+def test_val3_measured_modes_reproduce_exactly() -> None:
+    """VAL3: anchored low modes == FR Table 18.5; vacuo > measured at low order."""
+    freqs, labels = measured_modes_from_csv(
+        "bassdrum_82cm", specimen="both_heads"
+    )
+    assert len(freqs) >= 6
+    cats = make_bassdrum_catalogue(ROOT / "data" / "source_constants.csv")
+    drum = next(i for i in cats if i.name == "bassdrum_82cm")
+    assert drum.has_measured_anchor()
+    anchored = drum.low_modes()[: len(freqs)]
+    np.testing.assert_allclose(anchored, freqs, rtol=0, atol=0)
+
+    # In-vacuo from m ≥ 2: air-loading-dominated (0,1) and (1,1) overestimated
+    hi_f = np.array(
+        [float(f) for (m, n), f in zip(labels, freqs) if m >= 2]
+    )
+    hi_lab = tuple((m, n) for (m, n) in labels if m >= 2)
+    c_vac = fit_effective_wave_speed(hi_f, hi_lab, drum.radius)
+    for (m, n), f_m in zip(labels, freqs):
+        if m > 1:
+            continue
+        f_v = membrane_beta(m, n) * c_vac / (2.0 * np.pi * drum.radius)
+        assert f_v > f_m, f"({m}{n}): vacuo {f_v} should exceed measured {f_m}"
+
+    prof = generate_profile(drum)
+    assert any("measured-mode anchor active" in n for n in prof.notes)
+    assert any("fitted effective c" in n for n in prof.notes)
+
+
+def test_membrane_no_anchor_fallback_bit_identical_v031(tmp_path: Path) -> None:
+    """No usable measured rows → catalogue matches pre-anchor f11_nominal path."""
+    src = pd.read_csv(ROOT / "data" / "source_constants.csv")
+    # Flag every bass-drum mode row so the loader returns empty.
+    mask = src["record_type"] == "fr_ch18_bassdrum_mode"
+    src.loc[mask, "needs_manual_reading"] = 1
+    src.loc[mask, "value_si"] = np.nan
+    csv_path = tmp_path / "source_constants.csv"
+    src.to_csv(csv_path, index=False)
+
+    cats = make_bassdrum_catalogue(csv_path)
+    assert [c.name for c in cats] == ["bassdrum_32in", "bassdrum_28in"]
+    legacy = [
+        MembraneInstrument("bassdrum_32in", 0.813, f11_nominal=60.0),
+        MembraneInstrument("bassdrum_28in", 0.711, f11_nominal=72.0),
+    ]
+    for a, b in zip(cats, legacy):
+        np.testing.assert_array_equal(a.low_modes(), b.low_modes())
+        pa = generate_profile(a)
+        pb = generate_profile(b)
+        for ph in pa.energy_weights:
+            np.testing.assert_allclose(
+                pa.energy_weights[ph], pb.energy_weights[ph], rtol=0, atol=0
+            )
+
+
+def test_bassdrum_size_scaling_uses_fitted_c_not_copied_freqs() -> None:
+    """32-in / 28-in inherit effective c; do not copy 82 cm measured Hz."""
+    cats = make_bassdrum_catalogue(ROOT / "data" / "source_constants.csv")
+    by_name = {c.name: c for c in cats}
+    d82 = by_name["bassdrum_82cm"]
+    d32 = by_name["bassdrum_32in"]
+    assert d82.has_measured_anchor()
+    assert not d32.has_measured_anchor()
+    assert d32.effective_c == pytest.approx(d82.fitted_effective_c())
+    # At fixed c, f_mk ∝ 1/a ⇒ ratio of (1,1)-like scales = diameter ratio
+    scale_82 = d82.wave_speed() / d82.diameter
+    scale_32 = d32.wave_speed() / d32.diameter
+    assert scale_32 / scale_82 == pytest.approx(
+        d82.diameter / d32.diameter, rel=1e-9
+    )
+    # Must not equal the 82 cm measured (01) frequency
+    assert float(d32.low_modes()[0]) != pytest.approx(
+        float(d82.measured_modes[0]), rel=0, abs=0  # type: ignore[index]
+    )
+    prof = generate_profile(d32)
+    assert any("internal_default" in n for n in prof.notes)

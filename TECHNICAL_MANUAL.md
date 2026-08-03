@@ -27,7 +27,8 @@ shared code, no write-back into empirical corpora.
 **Out of scope**
 - Pitched-instrument synthesis (bridge fixtures only)
 - Chaotic / nonlinear ff broadband regime
-- Dome curvature, air loading, two-head coupling (flagged as limits)
+- Dome curvature; air loading / two-head coupling except via the optional
+  FR Table 18.5 measured-mode anchor at low order (flagged as limits)
 
 ---
 
@@ -42,15 +43,16 @@ calibration.py         Scale-commensurability bridge
 sample_metadata.py     Filename/folder parse for validation auto-group
 validate_against_recordings.py   Standalone recording check
 data/source_constants.csv        Digitized literature constants
-pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.2)
-tests/                           pytest (VAL1/VAL2, MC, metadata, WAV)
+pyproject.toml / requirements.txt   Packaging (nontunperc 0.3.3)
+tests/                           pytest (VAL1/VAL2/VAL3, MC, metadata, WAV)
 ```
 
 ### 2.1 Public API (stable)
 
 | Symbol | Module | Role |
 |---|---|---|
-| `PlateInstrument` / `MembraneInstrument` | `model` | Instrument dataclasses |
+| `PlateInstrument` / `MembraneInstrument` | `model` | Instrument dataclasses (membranes: optional `measured_modes`) |
+| `measured_modes_from_csv` / `make_bassdrum_catalogue` | `model` | FR Ch. 18 loader + 82 cm / scaled siblings |
 | `generate_profile(instr, …)` | `model` | Deterministic `DensityProfile` |
 | `AmplitudeLayer` | `model` | Measured/mixed band weights + SPL (with fill refusal) |
 | `FILL_FRAC_*` / `ERB_MEASURED_ENERGY_FRAC` | `model` | Provenance & calibration thresholds (`internal_default`) |
@@ -171,8 +173,36 @@ n(f) = 2π A f / c²          (rises linearly with f)
 τ(f) = τ_100 · (f/100)^(−α)  (order-of-magnitude, internal_default)
 ```
 
-Phases: strike (0–50 ms), decay (50–1000 ms).  
-Air loading and two-head coupling are **not** modelled.
+Phases: strike (0–50 ms), decay (50–1000 ms).
+
+### 5.1 Measured-mode anchor and effective wave speed
+
+Optional `MembraneInstrument.measured_modes` (Hz) from Fletcher & Rossing
+(1998) Table 18.5 (`fr_ch18_bassdrum_mode` rows; default specimen
+`both_heads`). Loader: `measured_modes_from_csv` (skips
+`needs_manual_reading=1`).
+
+When present, `low_modes()` returns the measured frequencies for the
+anchored range, then appends theoretical Bessel modes **only above**
+the highest measured frequency. The wave speed used for that
+continuation is a least-squares fit of `f = β c / (2π a)` to the
+measured set:
+
+```text
+c_eff = 2π a · (Σ β_i f_i) / (Σ β_i²)     [derived]
+```
+
+This absorbs air-loading and two-head coupling into the low modes
+(analogous to the Chladni curvature absorption for plates) and only at
+low order. Provenance of `c_eff`: `derived`.
+
+**Size scaling.** Table 18.5 is an 82 cm drum. That size carries the
+frequency anchor. Other catalogue diameters reuse the same fitted
+`c_eff` with their own radius (`f ∝ 1/a` at fixed effective `c`) —
+`internal_default`. Measured Hz are never copied across sizes.
+
+Without usable measured rows, behaviour falls back to the pre-anchor
+`f11_nominal` catalogue (bit-identical to v0.3.1).
 
 ---
 
@@ -346,6 +376,7 @@ figures) only.
 |---|---|
 | VAL1 | 46 cm bronze plate: `n(f)·1000 ≈ 64` modes/kHz; `n·2000 > 100` modes below 2 kHz (Wilbur holography in Rossing §9.2) |
 | VAL2 | Anchored `n=0` family reproduces Fig. 9.3 to ~0% for `m = 2…7` |
+| VAL3 | `bassdrum_82cm` anchored modes == FR Table 18.5; in-vacuo (c from m≥2) > measured for (0,1) and (1,1); % deviations printed |
 
 Implemented in `nontunperc` pipeline, `demo` wrapper, and
 `tests/test_model.py`.
@@ -372,7 +403,8 @@ Mylar membrane: `ρ = 1390 kg/m³`, default thickness 190 µm
 Minimum columns: `instrument`, `family`, `band_index`, `f_lo_hz`,
 `f_hi_hz`, `f_centre_hz`, `modes_per_band`, `energy_w_<phase>`.  
 Also: `energy_provenance`, `ref_distance_m`, `fill_fraction` (empty when
-N/A), optional `spl_db_<phase>`.
+N/A), `notes` (profile notes joined with ` | `, including measured-mode
+anchor / fitted `c` when active), optional `spl_db_<phase>`.
 
 ### 12.2 `density_profiles_mc.csv`
 
@@ -413,7 +445,7 @@ python -m pytest tests/ -q
 
 ## 14. Dependencies
 
-Declared in `pyproject.toml` (`nontunperc` 0.3.2, `requires-python >=3.10`)
+Declared in `pyproject.toml` (`nontunperc` 0.3.3, `requires-python >=3.10`)
 and mirrored in `requirements.txt`:
 
 Python ≥ 3.10 · numpy · scipy · matplotlib · pandas · soundfile  
@@ -425,7 +457,9 @@ Optional `[dev]`: pytest · GUI: tkinter (stdlib)
 
 1. **Flat-plate approximation** — dome/bow curvature not modelled.  
 2. **Linear regime** — chaotic ff broadband outside scope.  
-3. **Membranes in vacuo** — air loading / two-head coupling omitted.  
+3. **Membranes in vacuo** — with measured anchor, low modes are
+   `primary_source` (FR 1998); in-vacuo bias applies only above the
+   anchored range. Without anchor, air loading / two-head coupling omitted.  
 4. **Equipartition** — convention unless AmplitudeLayer **accepts** coverage (fill ≤ 0.60).  
 5. **Scale commensurability** — use calibration factor when >=2 bridge survivors exist; otherwise NO CALIBRATION ACHIEVED; spread = uncertainty; factor provisional under sparse digitization.
 6. **1931 HF chain** — above ~5 kHz prefer Meyer; `discrepancy_db` (`literature_derived`) records corrections.  

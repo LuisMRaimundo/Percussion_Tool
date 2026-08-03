@@ -1,4 +1,4 @@
-# NonTunPerc — non-tuned percussion density model (v0.3.2)
+# NonTunPerc — non-tuned percussion density model (v0.3.3)
 
 A bibliography-based, parametric model that generates **ERB-band spectral
 density profiles** for unpitched percussion from physical input parameters
@@ -37,8 +37,9 @@ double-clicking them is enough.
 ## 1. Input → output
 
 **Input:** instrument family (`plate` | `membrane`), diameter, effective
-thickness (plates) or tension / nominal (1,1)-mode frequency (membranes),
-material preset, optional Chladni anchor `(c, b, p)`.
+thickness (plates) or tension / nominal (1,1)-mode frequency / fitted
+effective wave speed (membranes), material preset, optional Chladni
+anchor `(c, b, p)` or Fletcher & Rossing measured membrane modes.
 
 **Output (per instrument):**
 - `modes_per_band` — modal count per 1-ERB band, 20 Hz–16 kHz;
@@ -47,6 +48,7 @@ material preset, optional Chladni anchor `(c, b, p)`.
 - optional `spl_db_<phase>` — absolute band levels (dB SPL) when the
   AmplitudeLayer accepts coverage (see §3), at the source reference
   distance (typically **3 ft / 0.9144 m**);
+- `notes` — profile caveats (e.g. measured-mode anchor active, fitted `c`);
 - `energy_provenance` and `fill_fraction` — how initial weights were
   obtained (equipartition vs measured/mixed; residual-fill fraction);
 - a composite scalar index per phase (explicitly labelled as a summary;
@@ -90,6 +92,19 @@ vectors are refused.
 Modes `f_mk = β_mk c / (2πa)` with `β_mk` Bessel zeros and
 `c = √(T/σ)`; asymptotic modal density `n(f) = 2πA f / c²` (rises
 linearly). Tension may be inferred from a nominal (1,1)-mode frequency.
+
+**Measured-mode anchor (Fletcher & Rossing 1998, Table 18.5):** the
+catalogue entry `bassdrum_82cm` (printed 82 cm concert bass drum; both
+heads, carry-head lower tension) loads `primary_source` modal frequencies
+from `data/source_constants.csv` (`record_type=fr_ch18_bassdrum_mode`).
+Those measured values override the lowest theoretical modes. A
+least-squares effective wave speed `c` (`derived`) is fitted to the
+measured set and used to continue the Bessel ladder **above** the highest
+measured mode — absorbing air-loading and two-head coupling at low order
+exactly as the Chladni anchor absorbs curvature for plates. Other
+catalogue sizes (32-in / 28-in) do **not** copy the 82 cm frequencies;
+they reuse the fitted effective `c` with their own diameter
+(`f ∝ 1/a` at fixed `c`, `internal_default`).
 
 ## 3. Absolute amplitude layer
 
@@ -200,6 +215,11 @@ strike `n//2`; 50% overlap (documented in the script).
 - **VAL2** — n = 0 mode family reproduces the Rossing Fig. 9.3 fit to
   0.00% by construction when the anchor is supplied; the h/d² scaling
   path is the extrapolative (and weaker) branch.
+- **VAL3** — `bassdrum_82cm` anchored modes reproduce Fletcher & Rossing
+  Table 18.5 exactly (by construction); side-by-side print documents
+  in-vacuo Bessel bias (theoretical > measured for the
+  air-loading-dominated lowest modes when `c` is taken from higher
+  modes).
 
 ## 8. Validity limits (must accompany any exported value)
 
@@ -209,8 +229,11 @@ strike `n//2`; 50% overlap (documented in the script).
    (Rossing, 2000, §9.4) is outside the model; at high dynamic levels the
    discrete-mode picture itself dissolves and profiles should be read as
    lower bounds on spectral occupation.
-3. **Membranes in vacuo.** Air loading and two-head coupling are not
-   modelled; the lowest bass-drum modes are overestimated in frequency.
+3. **Membranes in vacuo.** When measured modes are loaded, low modes are
+   `primary_source` (Fletcher & Rossing 1998 Table 18.5) and the in-vacuo
+   bias applies **only above the anchored range**. Without the anchor,
+   air loading and two-head coupling are not modelled and the lowest
+   bass-drum modes are overestimated in frequency.
 4. **Equipartition at excitation** is a stated convention, not a
    measurement; stroke type and striking point are not yet parameters.
    AmplitudeLayer replaces this only when digitized coverage exists **and**
